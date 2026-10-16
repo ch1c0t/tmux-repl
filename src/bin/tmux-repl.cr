@@ -99,7 +99,7 @@ module TmuxRepl
 
     private def executable : String
       path = File.expand_path(PROGRAM_NAME)
-      File.executable?(path) ? path : "tmux-repl"
+      File::Info.executable?(path) ? path : "tmux-repl"
     end
 
     private def tmux?(*args : String) : Bool
@@ -113,6 +113,7 @@ module TmuxRepl
     end
   end
 end
+
 require "./tmux-repl/*"
 
 if ARGV.size == 1
