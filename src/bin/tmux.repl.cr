@@ -27,8 +27,6 @@ when "--repl"
     exit 2
   end
   TmuxREPL.run_repl(path)
-when "--help", "help", "-h"
-  print_help
 else
   STDERR.puts "Unknown command or arguments."
   print_help

@@ -42,72 +42,91 @@ module TmuxREPL
   end
 
   class Session
+    module Helpers
+      private def state_dir : String
+        base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
+        File.join(base, "tmux-repl", @name)
+      end
+      
+      private def repl_executable : String
+        path = File.expand_path(PROGRAM_NAME)
+        File::Info.executable?(path) ? path : "tmux.repl"
+      end
+      
+      private def show_executable : String
+        path = File.expand_path(PROGRAM_NAME)
+        sibling = File.join(File.dirname(path), "tmux.show")
+        File::Info.executable?(sibling) ? sibling : "tmux.show"
+      end
+      
+      private def tmux?(*args : String) : Bool
+        Process.run("tmux", args.to_a, output: Process::Redirect::Close, error: Process::Redirect::Close).success?
+      rescue
+        false
+      end
+      
+      private def shell_quote(value : String) : String
+        "'#{value.gsub("'", "'\\''")}'"
+      end
+    end
+  
+    module Start
+      def start : Nil
+        if tmux?("has-session", "-t", @name)
+          Process.run("tmux", ["attach-session", "-t", @name])
+          return
+        else
+          create
+        end
+      end
+      
+      def create
+        Process.run("tmux", ["new-session", "-s", @name, "./bin/tmux.repl.input"])
+        setup_right_pane
+      end
+      
+      # Splits the window horizontally to create a right-hand output pane
+      def setup_right_pane
+        stdout = IO::Memory.new
+        # Split window horizontally (-h), detached (-d), return target data (-P -F)
+        status = Process.run(
+          "tmux", 
+          ["split-window", "-h", "-d", "-P", "-F", "\\\#{pane_tty}"], 
+          output: stdout
+        )
+      
+        unless status.success?
+          raise "Failed to split Tmux window. Make sure Tmux is operational."
+        end
+      
+        # Parse the target pane's pseudo-terminal path and hook into it
+        right_pane_tty = stdout.to_s.strip
+        @output_pane = File.open(right_pane_tty, "w")
+      end
+    end
+  
+    module Stop
+      def stop : Nil
+        tmux?("kill-session", "-t", @name)
+        FileUtils.rm_rf(state_dir)
+      end
+    end
+  
     getter name : String
+    
+    getter? in_tmux : Bool
+    getter output_pane : File?
     
     def initialize(@name : String)
       raise ArgumentError.new("Invalid tmux session name") unless @name.matches?(/\A[a-zA-Z0-9_-]+\z/)
+    
+      # Check if the process is running inside an active Tmux environment
+      @in_tmux = ENV.has_key?("TMUX")
+      @output_pane = nil
     end
     
-    def start : Nil
-      if tmux?("has-session", "-t", @name)
-        Process.run("tmux", ["attach-session", "-t", @name])
-        return
-      end
-    
-      dir = state_dir
-      FileUtils.mkdir_p(dir)
-      fifo = File.join(dir, "output.fifo")
-      created = false
-    
-      begin
-        File.delete(fifo) if File.exists?(fifo)
-        raise "Could not create output FIFO" unless Process.run("mkfifo", [fifo]).success?
-    
-        input = "#{shell_quote(repl_executable)} --repl #{shell_quote(fifo)}"
-        output = "#{shell_quote(show_executable)} #{shell_quote(fifo)}"
-        raise "Could not start tmux session" unless tmux?("new-session", "-d", "-s", @name, input)
-        created = true
-        raise "Could not create output pane" unless tmux?("split-window", "-h", "-t", @name, output)
-        raise "Could not select tmux layout" unless tmux?("select-layout", "-t", @name, "even-horizontal")
-        raise "Could not focus input pane" unless tmux?("select-pane", "-t", "#{@name}:0.0")
-        raise "Could not attach to tmux session" unless Process.run("tmux", ["attach-session", "-t", @name]).success?
-      rescue ex
-        tmux?("kill-session", "-t", @name) if created
-        FileUtils.rm_rf(dir)
-        STDERR.puts "tmux.repl: #{ex.message}"
-        raise ex
-      end
-    end
-    
-    def stop : Nil
-      tmux?("kill-session", "-t", @name)
-      FileUtils.rm_rf(state_dir)
-    end
-    
-    private def state_dir : String
-      base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-      File.join(base, "tmux-repl", @name)
-    end
-    
-    private def repl_executable : String
-      path = File.expand_path(PROGRAM_NAME)
-      File::Info.executable?(path) ? path : "tmux.repl"
-    end
-    
-    private def show_executable : String
-      path = File.expand_path(PROGRAM_NAME)
-      sibling = File.join(File.dirname(path), "tmux.show")
-      File::Info.executable?(sibling) ? sibling : "tmux.show"
-    end
-    
-    private def tmux?(*args : String) : Bool
-      Process.run("tmux", args.to_a, output: Process::Redirect::Close, error: Process::Redirect::Close).success?
-    rescue
-      false
-    end
-    
-    private def shell_quote(value : String) : String
-      "'#{value.gsub("'", "'\\''")}'"
-    end
+    include Start
+    include Stop
+    include Helpers
   end
 end
