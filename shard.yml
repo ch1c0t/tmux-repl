@@ -9,5 +9,5 @@ targets:
 dependencies:
   reply:
     github: I3oris/reply
-    version: ~> 0.4.0
+    version: "~> 0.4.0"
 crystal: ">= 1.15.1"
