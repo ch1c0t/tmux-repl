@@ -1,5 +1,5 @@
 ---
-name: tmux-repl
+name: tmux_repl
 version: 0.1.0
 authors:
 - Anatoly Chernov <chertoly@gmail.com>

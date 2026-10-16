@@ -1,13 +1,44 @@
 require "file_utils"
+require "reply"
 
-module TmuxRepl
+module TmuxREPL
+  record Result, command : String, stdout : String, stderr : String, status : Int32
+  
+  def self.execute(command : String) : Result
+    stdout = IO::Memory.new
+    stderr = IO::Memory.new
+    status = Process.run("/bin/sh", ["-lc", command], output: stdout, error: stderr)
+    Result.new(command, stdout.to_s, stderr.to_s, status.exit_code)
+  rescue ex
+    Result.new(command, "", ex.message || ex.class.name, 1)
+  end
+  
+  def self.write_result(path : String, result : Result) : Nil
+    File.open(path, "w") do |io|
+      io.puts "$ #{result.command}"
+      io.print result.stdout unless result.stdout.empty?
+      io.print result.stderr unless result.stderr.empty?
+      last = result.stderr.empty? ? result.stdout : result.stderr
+      io.puts unless last.empty? || last.ends_with?("\n")
+      io.puts "[exit status: #{result.status}]"
+    end
+  end
+  
+  def self.run_repl(path : String) : Nil
+    reader = Reply::Reader.new
+    reader.read_loop do |expression|
+      next if expression.strip.empty?
+      write_result(path, execute(expression))
+    end
+  end
+
   class Session
     getter name : String
-
+    
     def initialize(@name : String)
       raise ArgumentError.new("Invalid tmux session name") unless @name.matches?(/\A[a-zA-Z0-9_-]+\z/)
     end
-
+    
     def start : Nil
       if tmux?("has-session", "-t", @name)
         Process.run("tmux", ["attach-session", "-t", @name])
@@ -28,28 +59,28 @@ module TmuxRepl
       STDERR.puts "tmux-repl: #{ex.message}"
       raise ex
     end
-
+    
     def stop : Nil
       tmux?("kill-session", "-t", @name)
       FileUtils.rm_rf(state_dir)
     end
-
+    
     private def state_dir : String
       base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
       File.join(base, "tmux-repl", @name)
     end
-
+    
     private def executable : String
       path = File.expand_path(PROGRAM_NAME)
       File::Info.executable?(path) ? path : "tmux-repl"
     end
-
+    
     private def tmux?(*args : String) : Bool
       Process.run("tmux", args.to_a, output: Process::Redirect::Close, error: Process::Redirect::Close).success?
     rescue
       false
     end
-
+    
     private def shell_quote(value : String) : String
       "'#{value.gsub("'", "'\\''")}'"
     end
