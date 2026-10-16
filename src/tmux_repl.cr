@@ -7,7 +7,7 @@ module TmuxREPL
   def self.execute(command : String) : Result
     stdout = IO::Memory.new
     stderr = IO::Memory.new
-    status = Process.run("/bin/sh", ["-lc", command], output: stdout, error: stderr)
+    status = Process.run("/bin/sh", ["-c", command], output: stdout, error: stderr)
     Result.new(command, stdout.to_s, stderr.to_s, status.exit_code)
   rescue ex
     Result.new(command, "", ex.message || ex.class.name, 1)
@@ -31,6 +31,15 @@ module TmuxREPL
       write_result(path, execute(expression))
     end
   end
+  
+  def self.show(path : String) : Nil
+    loop do
+      File.open(path, "r") do |input|
+        IO.copy(input, STDOUT)
+        STDOUT.flush
+      end
+    end
+  end
 
   class Session
     getter name : String
@@ -44,20 +53,30 @@ module TmuxREPL
         Process.run("tmux", ["attach-session", "-t", @name])
         return
       end
+    
       dir = state_dir
       FileUtils.mkdir_p(dir)
       fifo = File.join(dir, "output.fifo")
-      File.delete(fifo) if File.exists?(fifo)
-      Process.run("mkfifo", [fifo]).success? || raise "Could not create output FIFO"
-      output = "cat #{shell_quote(fifo)}"
-      input = "#{shell_quote(executable)} --repl #{shell_quote(fifo)}"
-      Process.run("tmux", ["new-session", "-d", "-s", @name, output]).success? || raise "Could not start tmux session"
-      Process.run("tmux", ["split-window", "-h", "-t", @name, input]).success? || raise "Could not create input pane"
-      Process.run("tmux", ["select-layout", "-t", @name, "even-horizontal"])
-      Process.run("tmux", ["attach-session", "-t", @name])
-    rescue ex
-      STDERR.puts "tmux-repl: #{ex.message}"
-      raise ex
+      created = false
+    
+      begin
+        File.delete(fifo) if File.exists?(fifo)
+        raise "Could not create output FIFO" unless Process.run("mkfifo", [fifo]).success?
+    
+        input = "#{shell_quote(repl_executable)} --repl #{shell_quote(fifo)}"
+        output = "#{shell_quote(show_executable)} #{shell_quote(fifo)}"
+        raise "Could not start tmux session" unless tmux?("new-session", "-d", "-s", @name, input)
+        created = true
+        raise "Could not create output pane" unless tmux?("split-window", "-h", "-t", @name, output)
+        raise "Could not select tmux layout" unless tmux?("select-layout", "-t", @name, "even-horizontal")
+        raise "Could not focus input pane" unless tmux?("select-pane", "-t", "#{@name}:0.0")
+        raise "Could not attach to tmux session" unless Process.run("tmux", ["attach-session", "-t", @name]).success?
+      rescue ex
+        tmux?("kill-session", "-t", @name) if created
+        FileUtils.rm_rf(dir)
+        STDERR.puts "tmux.repl: #{ex.message}"
+        raise ex
+      end
     end
     
     def stop : Nil
@@ -70,9 +89,15 @@ module TmuxREPL
       File.join(base, "tmux-repl", @name)
     end
     
-    private def executable : String
+    private def repl_executable : String
       path = File.expand_path(PROGRAM_NAME)
-      File::Info.executable?(path) ? path : "tmux-repl"
+      File::Info.executable?(path) ? path : "tmux.repl"
+    end
+    
+    private def show_executable : String
+      path = File.expand_path(PROGRAM_NAME)
+      sibling = File.join(File.dirname(path), "tmux.show")
+      File::Info.executable?(sibling) ? sibling : "tmux.show"
     end
     
     private def tmux?(*args : String) : Bool
