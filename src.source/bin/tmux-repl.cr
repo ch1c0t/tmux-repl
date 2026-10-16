@@ -1,7 +1,5 @@
 require "./tmux-repl/*"
 
-VERSION = "0.1.0"
-
 if ARGV.size == 1
   case ARGV[0]
   when "-v", "version", "--version"
