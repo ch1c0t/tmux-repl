@@ -4,8 +4,10 @@ version: 0.1.0
 authors:
 - Anatoly Chernov <chertoly@gmail.com>
 targets:
-  tmux-repl:
-    main: src/bin/tmux-repl.cr
+  tmux.repl:
+    main: src/bin/tmux.repl.cr
+  tmux.show:
+    main: src/bin/tmux.show.cr
 dependencies:
   reply:
     github: I3oris/reply
