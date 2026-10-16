@@ -1,9 +1,13 @@
 ---
 name: tmux-repl
-version: 0.0.0
+version: 0.1.0
 authors:
 - Anatoly Chernov <chertoly@gmail.com>
 targets:
   tmux-repl:
     main: src/bin/tmux-repl.cr
+dependencies:
+  reply:
+    github: I3oris/reply
+    version: ~> 0.4.0
 crystal: ">= 1.15.1"
