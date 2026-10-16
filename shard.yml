@@ -1,0 +1,9 @@
+---
+name: tmux-repl
+version: 0.0.0
+authors:
+- Anatoly Chernov <chertoly@gmail.com>
+targets:
+  tmux-repl:
+    main: src/bin/tmux-repl.cr
+crystal: ">= 1.15.1"
