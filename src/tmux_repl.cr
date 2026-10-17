@@ -66,9 +66,10 @@ module TmuxREPL
   
     module Start
       def start : Nil
-        server = Tmux::Server.new
+        inside_tmux = !ENV["TMUX"]?.nil?
+        server = inside_tmux ? Tmux::Server.from_env : Tmux::Server.new
         if server.cmd("has-session", "-t", @name).success?
-          server.session(@name).attach(unset_tmux: true)
+          activate(server.session(@name), inside_tmux)
           return
         end
       
@@ -92,7 +93,7 @@ module TmuxREPL
           output_pane.send_keys(output, literal: true)
           input_pane.select
       
-          session.attach(unset_tmux: true)
+          activate(session, inside_tmux)
         rescue ex
           begin
             if active_session = session
@@ -109,6 +110,14 @@ module TmuxREPL
       end
     end
   
+    private def activate(session : Tmux::Session, inside_tmux : Bool) : Nil
+      if inside_tmux
+        session.switch_client
+      else
+        session.attach
+      end
+    end
+    
     module Stop
       def stop : Nil
         begin
