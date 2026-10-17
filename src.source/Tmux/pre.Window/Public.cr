@@ -1,3 +1,11 @@
+def cmd(*args : String) : CommandResult
+  @server.cmd(*args)
+end
+
+def run!(*args : String) : CommandResult
+  @server.run!(*args)
+end
+
 def session : Session
   Session.new(@server, @session_id)
 end

@@ -1,3 +1,11 @@
+def cmd(*args : String) : CommandResult
+  @server.cmd(*args)
+end
+
+def run!(*args : String) : CommandResult
+  @server.run!(*args)
+end
+
 def window : Window
   Window.new(@server, @session_id, @window_id)
 end

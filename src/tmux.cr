@@ -165,6 +165,14 @@ module Tmux
     end
 
     module Public
+      def cmd(*args : String) : CommandResult
+        @server.cmd(*args)
+      end
+
+      def run!(*args : String) : CommandResult
+        @server.run!(*args)
+      end
+
       def session_name : String
         formatted_value("\#{session_name}")
       end
@@ -227,6 +235,14 @@ module Tmux
     end
 
     module Public
+      def cmd(*args : String) : CommandResult
+        @server.cmd(*args)
+      end
+
+      def run!(*args : String) : CommandResult
+        @server.run!(*args)
+      end
+
       def session : Session
         Session.new(@server, @session_id)
       end
@@ -306,6 +322,14 @@ module Tmux
     end
 
     module Public
+      def cmd(*args : String) : CommandResult
+        @server.cmd(*args)
+      end
+
+      def run!(*args : String) : CommandResult
+        @server.run!(*args)
+      end
+
       def window : Window
         Window.new(@server, @session_id, @window_id)
       end
