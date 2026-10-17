@@ -108,16 +108,19 @@ module TmuxREPL
           raise ex
         end
       end
-    end
-  
-    private def activate(session : Tmux::Session, inside_tmux : Bool) : Nil
-      if inside_tmux
-        session.switch_client
-      else
-        session.attach
+      
+      
+      
+      
+      private def activate(session : Tmux::Session, inside_tmux : Bool) : Nil
+        if inside_tmux
+          session.switch_client
+        else
+          session.attach
+        end
       end
     end
-    
+  
     module Stop
       def stop : Nil
         begin
