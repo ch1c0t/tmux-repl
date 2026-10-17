@@ -36,7 +36,7 @@ describe Tmux::Client do
     base = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-api-spec-#{Process.pid}")
     binary = "#{base}.sh"
     output = "#{base}.args"
-    File.write(binary, "#!/bin/sh\nprintf '%s\n' \"$@\" > #{output}\n")
+    File.write(binary, "#!/bin/sh\nprintf '%s\\n' \"$@\" > #{output}\n")
     File.chmod(binary, 0o755)
 
     begin
