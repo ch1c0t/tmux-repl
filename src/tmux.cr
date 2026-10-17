@@ -405,6 +405,11 @@ module Tmux
         @server.client.interactive!("attach-session", "-t", @session_id, unset_tmux: unset_tmux)
       end
       
+      def switch_client : Nil
+        @server.run!("switch-client", "-t", @session_id)
+        nil
+      end
+      
       def kill : CommandResult
         @server.run!("kill-session", "-t", @session_id)
       end
