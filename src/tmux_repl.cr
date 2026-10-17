@@ -121,7 +121,7 @@ module TmuxREPL
     module Stop
       def stop : Nil
         begin
-          server = ENV["TMUX"]? ? Tmux::Server.from_env : Tmux::Server.new
+          server = ENV["TMUX"]?.nil? ? Tmux::Server.new : Tmux::Server.from_env
           server.cmd("kill-session", "-t", @name)
         rescue Tmux::Error
         ensure
