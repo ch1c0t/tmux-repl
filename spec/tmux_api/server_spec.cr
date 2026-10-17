@@ -3,7 +3,7 @@ require "time"
 require "../../src/tmux"
 
 describe Tmux::Server do
-  it "creates a session, splits a pane, sends keys, and captures output" do
+  it "creates a session, splits to the right, sends keys, and captures output" do
     socket_name = "crystal_tmux_api_spec_#{Process.pid}"
     server = Tmux::Server.new(socket_name)
 
@@ -16,6 +16,10 @@ describe Tmux::Server do
       pane = window.active_pane
       split = pane.split(:right, detached: true)
       split.window.window_id.should eq(window.window_id)
+
+      left = pane.display_message("\#{pane_left}").to_i
+      right = split.display_message("\#{pane_left}").to_i
+      right.should be > left
 
       pane.send_keys("printf 'TMUX_API_READY'")
       deadline = Time.instant + 3.seconds

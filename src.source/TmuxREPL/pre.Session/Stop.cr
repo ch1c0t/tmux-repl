@@ -1,4 +1,8 @@
 def stop : Nil
-  tmux?("kill-session", "-t", @name)
-  FileUtils.rm_rf(state_dir)
+  begin
+    Tmux::Server.new.cmd("kill-session", "-t", @name)
+  rescue Tmux::Error
+  ensure
+    FileUtils.rm_rf(state_dir)
+  end
 end

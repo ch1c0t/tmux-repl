@@ -1,5 +1,6 @@
 require "file_utils"
 require "reply"
+require "tmux"
 
 module TmuxREPL
   record Result, command : String, stdout : String, stderr : String, status : Int32
@@ -58,63 +59,49 @@ module TmuxREPL
         File::Info.executable?(sibling) ? sibling : "tmux.show"
       end
       
-      private def tmux?(*args : String) : Bool
-        Process.run("tmux", args.to_a, output: Process::Redirect::Close, error: Process::Redirect::Close).success?
-      rescue
-        false
-      end
-      
       private def shell_quote(value : String) : String
         "'#{value.gsub("'", "'\\''")}'"
-      end
-      
-      private def ensure_input_pane_left : Nil
-        input_pane = "#{@name}:0.0"
-        output_pane = "#{@name}:0.1"
-        if pane_left(input_pane) > pane_left(output_pane)
-          raise "Could not move input pane to the left" unless tmux?("swap-pane", "-d", "-s", input_pane, "-t", output_pane)
-        end
-      end
-      
-      private def pane_left(pane : String) : Int32
-        stdout = IO::Memory.new
-        status = Process.run(
-          "tmux",
-          ["display-message", "-p", "-t", pane, "\#{pane_left}"],
-          output: stdout,
-          error: Process::Redirect::Close
-        )
-        raise "Could not determine tmux pane position" unless status.success?
-        stdout.to_s.strip.to_i
       end
     end
   
     module Start
       def start : Nil
-        if tmux?("has-session", "-t", @name)
-          Process.run("tmux", ["attach-session", "-t", @name])
+        server = Tmux::Server.new
+        if server.cmd("has-session", "-t", @name).success?
+          server.session(@name).attach
           return
         end
       
         dir = state_dir
         log = File.join(dir, "output.log")
-        created = false
+        session : Tmux::Session? = nil
       
         begin
           FileUtils.mkdir_p(dir)
           File.write(log, "")
       
+          session = server.new_session(name: @name, detached: true)
+          window = session.active_window
+          input_pane = window.active_pane
+          output_pane = input_pane.split(:right, detached: true)
+          window.select_layout("even-horizontal")
+      
           input = "#{shell_quote(repl_executable)} --repl #{shell_quote(log)}"
           output = "#{shell_quote(show_executable)} #{shell_quote(log)}"
-          raise "Could not start tmux session" unless tmux?("new-session", "-d", "-s", @name, input)
-          created = true
-          raise "Could not create output pane" unless tmux?("split-window", "-h", "-t", @name, output)
-          raise "Could not select tmux layout" unless tmux?("select-layout", "-t", @name, "even-horizontal")
-          ensure_input_pane_left
-          raise "Could not focus input pane" unless tmux?("select-pane", "-t", "#{@name}:0.0")
-          raise "Could not attach to tmux session" unless Process.run("tmux", ["attach-session", "-t", @name]).success?
+          input_pane.send_keys(input, literal: true)
+          output_pane.send_keys(output, literal: true)
+          input_pane.select
+      
+          session.attach
         rescue ex
-          tmux?("kill-session", "-t", @name) if created
+          begin
+            if active_session = session
+              active_session.kill
+            else
+              server.cmd("kill-session", "-t", @name)
+            end
+          rescue Tmux::Error
+          end
           FileUtils.rm_rf(dir)
           STDERR.puts "tmux.repl: #{ex.message}"
           raise ex
@@ -124,8 +111,12 @@ module TmuxREPL
   
     module Stop
       def stop : Nil
-        tmux?("kill-session", "-t", @name)
-        FileUtils.rm_rf(state_dir)
+        begin
+          Tmux::Server.new.cmd("kill-session", "-t", @name)
+        rescue Tmux::Error
+        ensure
+          FileUtils.rm_rf(state_dir)
+        end
       end
     end
   

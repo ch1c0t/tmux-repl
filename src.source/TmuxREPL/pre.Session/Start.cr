@@ -1,28 +1,40 @@
 def start : Nil
-  if tmux?("has-session", "-t", @name)
-    Process.run("tmux", ["attach-session", "-t", @name])
+  server = Tmux::Server.new
+  if server.cmd("has-session", "-t", @name).success?
+    server.session(@name).attach
     return
   end
 
   dir = state_dir
   log = File.join(dir, "output.log")
-  created = false
+  session : Tmux::Session? = nil
 
   begin
     FileUtils.mkdir_p(dir)
     File.write(log, "")
 
+    session = server.new_session(name: @name, detached: true)
+    window = session.active_window
+    input_pane = window.active_pane
+    output_pane = input_pane.split(:right, detached: true)
+    window.select_layout("even-horizontal")
+
     input = "#{shell_quote(repl_executable)} --repl #{shell_quote(log)}"
     output = "#{shell_quote(show_executable)} #{shell_quote(log)}"
-    raise "Could not start tmux session" unless tmux?("new-session", "-d", "-s", @name, input)
-    created = true
-    raise "Could not create output pane" unless tmux?("split-window", "-h", "-t", @name, output)
-    raise "Could not select tmux layout" unless tmux?("select-layout", "-t", @name, "even-horizontal")
-    ensure_input_pane_left
-    raise "Could not focus input pane" unless tmux?("select-pane", "-t", "#{@name}:0.0")
-    raise "Could not attach to tmux session" unless Process.run("tmux", ["attach-session", "-t", @name]).success?
+    input_pane.send_keys(input, literal: true)
+    output_pane.send_keys(output, literal: true)
+    input_pane.select
+
+    session.attach
   rescue ex
-    tmux?("kill-session", "-t", @name) if created
+    begin
+      if active_session = session
+        active_session.kill
+      else
+        server.cmd("kill-session", "-t", @name)
+      end
+    rescue Tmux::Error
+    end
     FileUtils.rm_rf(dir)
     STDERR.puts "tmux.repl: #{ex.message}"
     raise ex
