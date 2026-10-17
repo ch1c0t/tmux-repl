@@ -21,6 +21,17 @@ describe Tmux::Client do
     end
   end
 
+  it "preserves TMUX for normal interactive commands" do
+    previous = ENV["TMUX"]?
+    ENV["TMUX"] = "nested"
+
+    begin
+      Tmux::Client.new("/bin/sh").interactive!("-c", "test \"$TMUX\" = nested")
+    ensure
+      ENV["TMUX"] = previous
+    end
+  end
+
   it "can unset TMUX for an interactive child process" do
     previous = ENV["TMUX"]?
     ENV["TMUX"] = "nested"
