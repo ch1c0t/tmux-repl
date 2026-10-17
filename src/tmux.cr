@@ -18,6 +18,36 @@ module Tmux
   end
 
   class Client
+    module Run
+      # Overload for a pre-built array/collection
+      def run(args : Enumerable(String)) : CommandResult
+        stdout = IO::Memory.new
+        stderr = IO::Memory.new
+        # args is already a collection, so we can convert it straight to an array
+        status = Process.run(@binary, @server_options + args.to_a, output: stdout, error: stderr)
+        CommandResult.new(args.to_a, stdout.to_s, stderr.to_s, status.exit_code)
+      rescue ex
+        raise Error.new("Unable to execute #{@binary}: #{ex.message || ex.class.name}")
+      end
+      
+      # Keep this for backward compatibility (e.g., run("status", "-v"))
+      def run(*args : String) : CommandResult
+        run(args)
+      end
+      
+      # Overload for a pre-built array/collection
+      def run!(args : Enumerable(String)) : CommandResult
+        result = run(args)
+        raise CommandError.new(result) unless result.success?
+        result
+      end
+      
+      # Keep this for backward compatibility (e.g., run!("status"))
+      def run!(*args : String) : CommandResult
+        run!(args)
+      end
+    end
+  
     getter binary : String
     
     def initialize(binary : String = "tmux", socket_name : String? = nil, socket_path : String? = nil)
@@ -29,20 +59,7 @@ module Tmux
       @server_options.concat(["-S", socket_path]) if socket_path
     end
     
-    def run(*args : String) : CommandResult
-      stdout = IO::Memory.new
-      stderr = IO::Memory.new
-      status = Process.run(@binary, @server_options + args.to_a, output: stdout, error: stderr)
-      CommandResult.new(args.to_a, stdout.to_s, stderr.to_s, status.exit_code)
-    rescue ex
-      raise Error.new("Unable to execute #{@binary}: #{ex.message || ex.class.name}")
-    end
-    
-    def run!(*args : String) : CommandResult
-      result = run(*args)
-      raise CommandError.new(result) unless result.success?
-      result
-    end
+    include Run
     
     def interactive!(*args : String) : Nil
       status = Process.run(@binary, @server_options + args.to_a)
@@ -83,6 +100,71 @@ module Tmux
     end
   
     module Public
+      module CapturePane
+        def capture_pane(start : String? = nil, finish : String? = nil, escape_sequences : Bool = false, join_wrapped : Bool = false) : Array(String)
+          args = ["capture-pane", "-p", "-t", @pane_id]
+          args.concat(["-S", start]) if start
+          args.concat(["-E", finish]) if finish
+          args << "-e" if escape_sequences
+          args << "-J" if join_wrapped
+          @server.run!(args).stdout_lines
+        end
+      end
+    
+      module Resize
+        def resize(width : Int32? = nil, height : Int32? = nil) : Pane
+          raise ArgumentError.new("Specify width, height, or both") unless width || height
+          args = ["resize-pane", "-t", @pane_id]
+          args.concat(["-x", width.to_s]) if width
+          args.concat(["-y", height.to_s]) if height
+          @server.run!(args)
+          self
+        end
+      end
+    
+      module SendKeys
+        def send_keys(keys : String, enter : Bool = true, literal : Bool = false) : Pane
+          if literal
+            @server.run!("send-keys", "-t", @pane_id, "-l", keys)
+            @server.run!("send-keys", "-t", @pane_id, "Enter") if enter
+          else
+            args = ["send-keys", "-t", @pane_id, keys]
+            args << "Enter" if enter
+            @server.run!(args)
+          end
+          self
+        end
+      end
+    
+      module Split
+        def split(direction : Symbol = :right, size : Int32? = nil, start_directory : String? = nil, detached : Bool = true) : Pane
+          args = ["split-window", "-P", "-F", "\#{pane_id}", "-t", @pane_id]
+          case direction
+          when :right
+            args << "-h"
+          when :left
+            args.concat(["-h", "-b"])
+          when :below
+            args << "-v"
+          when :above
+            args.concat(["-v", "-b"])
+          else
+            raise ArgumentError.new("direction must be :right, :left, :above, or :below")
+          end
+          args << "-d" if detached
+          args.concat(["-l", size.to_s]) if size
+          args.concat(["-c", start_directory]) if start_directory
+          id = @server.run!(args).stdout.strip
+          raise Error.new("tmux did not return a pane ID") if id.empty?
+          Pane.new(@server, @session_id, @window_id, id)
+        end
+      end
+    
+      include Split
+      include SendKeys
+      include CapturePane
+      include Resize
+      
       def cmd(*args : String) : CommandResult
         @server.cmd(*args)
       end
@@ -123,53 +205,11 @@ module Tmux
         window.active_pane.pane_id == @pane_id
       end
       
-      def split(direction : Symbol = :right, size : Int32? = nil, start_directory : String? = nil, detached : Bool = true) : Pane
-        args = ["split-window", "-P", "-F", "\#{pane_id}", "-t", @pane_id]
-        case direction
-        when :right
-          args << "-h"
-        when :left
-          args.concat(["-h", "-b"])
-        when :below
-          args << "-v"
-        when :above
-          args.concat(["-v", "-b"])
-        else
-          raise ArgumentError.new("direction must be :right, :left, :above, or :below")
-        end
-        args << "-d" if detached
-        args.concat(["-l", size.to_s]) if size
-        args.concat(["-c", start_directory]) if start_directory
-        id = @server.run!(*args).stdout.strip
-        raise Error.new("tmux did not return a pane ID") if id.empty?
-        Pane.new(@server, @session_id, @window_id, id)
-      end
-      
-      def send_keys(keys : String, enter : Bool = true, literal : Bool = false) : Pane
-        if literal
-          @server.run!("send-keys", "-t", @pane_id, "-l", keys)
-          @server.run!("send-keys", "-t", @pane_id, "Enter") if enter
-        else
-          args = ["send-keys", "-t", @pane_id, keys]
-          args << "Enter" if enter
-          @server.run!(*args)
-        end
-        self
-      end
-      
       def enter : Pane
         @server.run!("send-keys", "-t", @pane_id, "Enter")
         self
       end
       
-      def capture_pane(start : String? = nil, finish : String? = nil, escape_sequences : Bool = false, join_wrapped : Bool = false) : Array(String)
-        args = ["capture-pane", "-p", "-t", @pane_id]
-        args.concat(["-S", start]) if start
-        args.concat(["-E", finish]) if finish
-        args << "-e" if escape_sequences
-        args << "-J" if join_wrapped
-        @server.run!(*args).stdout_lines
-      end
       
       def display_message(format : String) : String
         formatted_value(format)
@@ -177,15 +217,6 @@ module Tmux
       
       def select : Pane
         @server.run!("select-pane", "-t", @pane_id)
-        self
-      end
-      
-      def resize(width : Int32? = nil, height : Int32? = nil) : Pane
-        raise ArgumentError.new("Specify width, height, or both") unless width || height
-        args = ["resize-pane", "-t", @pane_id]
-        args.concat(["-x", width.to_s]) if width
-        args.concat(["-y", height.to_s]) if height
-        @server.run!(*args)
         self
       end
       
@@ -239,13 +270,40 @@ module Tmux
     end
   
     module Public
+      module NewSession
+        def new_session(name : String? = nil, detached : Bool = true, window_name : String? = nil, start_directory : String? = nil) : Session
+          # 1. Initialize as a true Array using [...]
+          args = ["new-session", "-d", "-P", "-F", "\#{session_id}"]
+          args.concat(["-s", name]) if name
+          args.concat(["-n", window_name]) if window_name
+          args.concat(["-c", start_directory]) if start_directory
+        
+          # 2. Pass the array directly without the '*'
+          id = run!(args).stdout.strip
+        
+          raise Error.new("tmux did not return a session ID") if id.empty?
+          session = Session.new(self, id)
+          session.attach unless detached
+          session
+        end
+      end
+    
+      module Run
+        def run!(*args : String) : CommandResult
+          @client.run!(args)
+        end
+        
+        def run!(args : Enumerable(String)) : CommandResult
+          @client.run!(args)
+        end
+      end
+    
       def cmd(*args : String) : CommandResult
         @client.run(*args)
       end
       
-      def run!(*args : String) : CommandResult
-        @client.run!(*args)
-      end
+      include Run
+      include NewSession
       
       def sessions : Array(Session)
         session_ids.map { |id| Session.new(self, id) }
@@ -256,18 +314,6 @@ module Tmux
           return item if item.session_id == selector || item.session_name == selector
         end
         raise Error.new("No tmux session matches #{selector.inspect}")
-      end
-      
-      def new_session(name : String? = nil, detached : Bool = true, window_name : String? = nil, start_directory : String? = nil) : Session
-        args = ["new-session", "-d", "-P", "-F", "\#{session_id}"]
-        args.concat(["-s", name]) if name
-        args.concat(["-n", window_name]) if window_name
-        args.concat(["-c", start_directory]) if start_directory
-        id = run!(*args).stdout.strip
-        raise Error.new("tmux did not return a session ID") if id.empty?
-        session = Session.new(self, id)
-        session.attach unless detached
-        session
       end
       
       def windows : Array(Window)

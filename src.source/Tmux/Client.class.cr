@@ -9,20 +9,7 @@ def initialize(binary : String = "tmux", socket_name : String? = nil, socket_pat
   @server_options.concat(["-S", socket_path]) if socket_path
 end
 
-def run(*args : String) : CommandResult
-  stdout = IO::Memory.new
-  stderr = IO::Memory.new
-  status = Process.run(@binary, @server_options + args.to_a, output: stdout, error: stderr)
-  CommandResult.new(args.to_a, stdout.to_s, stderr.to_s, status.exit_code)
-rescue ex
-  raise Error.new("Unable to execute #{@binary}: #{ex.message || ex.class.name}")
-end
-
-def run!(*args : String) : CommandResult
-  result = run(*args)
-  raise CommandError.new(result) unless result.success?
-  result
-end
+include Run
 
 def interactive!(*args : String) : Nil
   status = Process.run(@binary, @server_options + args.to_a)
