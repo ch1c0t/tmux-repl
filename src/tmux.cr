@@ -61,11 +61,12 @@ module Tmux
     
     include Run
     
-    def interactive!(*args : String) : Nil
-      status = Process.run(@binary, @server_options + args.to_a,
-      input: Process::Redirect::Inherit,
-      output: Process::Redirect::Inherit,
-      error: Process::Redirect::Inherit)
+    def interactive!(*args : String, unset_tmux : Bool = false) : Nil
+      env = unset_tmux ? {"TMUX" => nil.as(String?)} : nil
+      status = Process.run(@binary, @server_options + args.to_a, env: env,
+        input: Process::Redirect::Inherit,
+        output: Process::Redirect::Inherit,
+        error: Process::Redirect::Inherit)
       raise Error.new("tmux command failed (#{status.exit_code})") unless status.success?
     rescue ex
       raise ex if ex.is_a?(Error)
