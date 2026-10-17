@@ -36,13 +36,13 @@ describe Tmux::Client do
     base = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-api-spec-#{Process.pid}")
     binary = "#{base}.sh"
     output = "#{base}.args"
-    File.write(binary, "#!/bin/sh\\nprintf '%s\\n' \"$@\" > #{output}\\n")
+    File.write(binary, "#!/bin/sh\nprintf '%s\n' \"$@\" > #{output}\n")
     File.chmod(binary, 0o755)
 
     begin
       server = Tmux::Server.new(nil, nil, binary)
       Tmux::Session.new(server, "$target").switch_client
-      File.read(output).should eq("switch-client\\n-t\\n$target\\n")
+      File.read(output).should eq("switch-client\n-t\n$target\n")
     ensure
       File.delete(binary) if File.exists?(binary)
       File.delete(output) if File.exists?(output)
