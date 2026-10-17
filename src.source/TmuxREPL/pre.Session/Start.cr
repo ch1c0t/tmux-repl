@@ -5,16 +5,15 @@ def start : Nil
   end
 
   dir = state_dir
-  FileUtils.mkdir_p(dir)
-  fifo = File.join(dir, "output.fifo")
+  log = File.join(dir, "output.log")
   created = false
 
   begin
-    File.delete(fifo) if File.exists?(fifo)
-    raise "Could not create output FIFO" unless Process.run("mkfifo", [fifo]).success?
+    FileUtils.mkdir_p(dir)
+    File.write(log, "")
 
-    input = "#{shell_quote(repl_executable)} --repl #{shell_quote(fifo)}"
-    output = "#{shell_quote(show_executable)} #{shell_quote(fifo)}"
+    input = "#{shell_quote(repl_executable)} --repl #{shell_quote(log)}"
+    output = "#{shell_quote(show_executable)} #{shell_quote(log)}"
     raise "Could not start tmux session" unless tmux?("new-session", "-d", "-s", @name, input)
     created = true
     raise "Could not create output pane" unless tmux?("split-window", "-h", "-t", @name, output)

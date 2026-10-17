@@ -5,11 +5,12 @@ Usage:
   tmux.repl stop [SESSION]    Stop a session and remove its state
   tmux.repl --help            Show this help
 
-Commands are entered in the left pane. The tmux.show executable runs
-in the right pane and continuously displays command output and exit status.
+Commands are entered in the left pane. Each completed command's output and exit
+status are appended to a per-session output log. The tmux.show executable follows
+that log in the right pane.
 
 Environment:
   TMUX_REPL_SESSION  Default session name (default: tmux-repl)
   XDG_STATE_HOME     State directory base (default: ~/.local/state)
 
-Requires tmux, tmux.repl, tmux.show, and a POSIX /bin/sh.
+Requires tmux, tmux.repl, tmux.show, tail, and a POSIX /bin/sh.

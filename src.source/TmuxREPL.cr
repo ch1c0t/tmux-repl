@@ -10,13 +10,17 @@ rescue ex
 end
 
 def self.write_result(path : String, result : Result) : Nil
-  File.open(path, "w") do |io|
+  File.open(path, "a") do |io|
     io.puts "$ #{result.command}"
     io.print result.stdout unless result.stdout.empty?
-    io.print result.stderr unless result.stderr.empty?
+    if !result.stderr.empty?
+      io.puts unless result.stdout.empty? || result.stdout.ends_with?("\n")
+      io.print result.stderr
+    end
     last = result.stderr.empty? ? result.stdout : result.stderr
     io.puts unless last.empty? || last.ends_with?("\n")
     io.puts "[exit status: #{result.status}]"
+    io.puts
   end
 end
 
@@ -29,10 +33,5 @@ def self.run_repl(path : String) : Nil
 end
 
 def self.show(path : String) : Nil
-  loop do
-    File.open(path, "r") do |input|
-      IO.copy(input, STDOUT)
-      STDOUT.flush
-    end
-  end
+  Process.exec("tail", ["-n", "+1", "-f", path])
 end

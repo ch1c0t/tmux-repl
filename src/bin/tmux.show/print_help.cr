@@ -1,5 +1,10 @@
 HELP_MESSAGE = <<-S
-A help message for tmux.show.
+tmux.show - follow a tmux.repl output log
+
+Usage:
+  tmux.show LOG
+
+Displays the log from its first line and continuously follows appended output.
 S
 
 def print_help
