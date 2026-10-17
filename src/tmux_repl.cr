@@ -1,6 +1,6 @@
 require "file_utils"
 require "reply"
-require "tmux"
+require "./tmux"
 
 module TmuxREPL
   record Result, command : String, stdout : String, stderr : String, status : Int32
