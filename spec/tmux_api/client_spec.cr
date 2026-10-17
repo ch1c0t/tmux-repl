@@ -20,4 +20,15 @@ describe Tmux::Client do
       Tmux::Client.new("/bin/sh").run!("-c", "exit 3")
     end
   end
+
+  it "can unset TMUX for an interactive child process" do
+    previous = ENV["TMUX"]?
+    ENV["TMUX"] = "nested"
+
+    begin
+      Tmux::Client.new("/bin/sh").interactive!("-c", "test -z \"$TMUX\"", unset_tmux: true)
+    ensure
+      ENV["TMUX"] = previous
+    end
+  end
 end
