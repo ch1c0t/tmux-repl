@@ -1,0 +1,25 @@
+name: Crystal
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: crystal-lang/install-crystal@v1
+        with:
+          crystal: "1.15.1"
+      - name: Install tmux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tmux
+      - name: Install shards
+        run: shards install
+      - name: Build CLI targets
+        run: shards build
+      - name: Run Crystal specs
+        run: crystal spec
