@@ -18,6 +18,7 @@ def start : Nil
     created = true
     raise "Could not create output pane" unless tmux?("split-window", "-h", "-t", @name, output)
     raise "Could not select tmux layout" unless tmux?("select-layout", "-t", @name, "even-horizontal")
+    ensure_input_pane_left
     raise "Could not focus input pane" unless tmux?("select-pane", "-t", "#{@name}:0.0")
     raise "Could not attach to tmux session" unless Process.run("tmux", ["attach-session", "-t", @name]).success?
   rescue ex

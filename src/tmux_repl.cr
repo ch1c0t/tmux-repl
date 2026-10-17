@@ -67,6 +67,7 @@ module TmuxREPL
         created = true
         raise "Could not create output pane" unless tmux?("split-window", "-h", "-t", @name, output)
         raise "Could not select tmux layout" unless tmux?("select-layout", "-t", @name, "even-horizontal")
+        ensure_input_pane_left
         raise "Could not focus input pane" unless tmux?("select-pane", "-t", "#{@name}:0.0")
         raise "Could not attach to tmux session" unless Process.run("tmux", ["attach-session", "-t", @name]).success?
       rescue ex
@@ -106,6 +107,26 @@ module TmuxREPL
     
     private def shell_quote(value : String) : String
       "'#{value.gsub("'", "'\\''")}'"
+    end
+
+    private def ensure_input_pane_left : Nil
+      input_pane = "#{@name}:0.0"
+      output_pane = "#{@name}:0.1"
+      if pane_left(input_pane) > pane_left(output_pane)
+        raise "Could not move input pane to the left" unless tmux?("swap-pane", "-d", "-s", input_pane, "-t", output_pane)
+      end
+    end
+
+    private def pane_left(pane : String) : Int32
+      stdout = IO::Memory.new
+      status = Process.run(
+        "tmux",
+        ["display-message", "-p", "-t", pane, "\#{pane_left}"],
+        output: stdout,
+        error: Process::Redirect::Close
+      )
+      raise "Could not determine tmux pane position" unless status.success?
+      stdout.to_s.strip.to_i
     end
   end
 end
