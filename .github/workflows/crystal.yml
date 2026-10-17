@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: crystal-lang/install-crystal@v1
         with:
-          crystal: "1.15.1"
+          crystal: "1.22"
       - name: Install tmux
         run: |
           sudo apt-get update
