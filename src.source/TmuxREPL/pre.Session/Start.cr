@@ -1,7 +1,7 @@
 def start : Nil
   server = Tmux::Server.new
   if server.cmd("has-session", "-t", @name).success?
-    server.session(@name).attach
+    server.session(@name).attach(unset_tmux: true)
     return
   end
 
@@ -25,7 +25,7 @@ def start : Nil
     output_pane.send_keys(output, literal: true)
     input_pane.select
 
-    session.attach
+    session.attach(unset_tmux: true)
   rescue ex
     begin
       if active_session = session
