@@ -401,8 +401,8 @@ module Tmux
         self
       end
       
-      def attach : Nil
-        @server.client.interactive!("attach-session", "-t", @session_id)
+      def attach(unset_tmux : Bool = false) : Nil
+        @server.client.interactive!("attach-session", "-t", @session_id, unset_tmux: unset_tmux)
       end
       
       def kill : CommandResult
