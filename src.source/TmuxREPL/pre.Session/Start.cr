@@ -1,9 +1,9 @@
-def start : Nil
+def start(focus : Bool = true) : Nil
   server = current_server
   if session = find_session(server)
-    activate(session)
+    activate(session) if focus
   else
-    create_session(server)
+    create_session(server, focus)
   end
 end
 
