@@ -24,10 +24,13 @@ def self.write_result(path : String, result : Result) : Nil
   end
 end
 
-def self.run_repl(path : String) : Nil
+def self.run_repl(path : String, session_name : String? = nil) : Nil
+  name = session_name || File.basename(File.dirname(path))
+  stream = CommandStream.new(name)
   reader = Reply::Reader.new
   reader.read_loop do |expression|
     next if expression.strip.empty?
+    stream.publish(expression)
     write_result(path, execute(expression))
   end
 end
