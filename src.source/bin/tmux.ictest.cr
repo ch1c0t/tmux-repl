@@ -40,5 +40,9 @@ ictest_window = ictest_pane.window
 ictest_session = ictest_pane.session
 ictest_environment = ENV.to_h
 
+def ocr
+  puts "from #ocr"
+end
+
 puts "tmux.ictest is ready; inspect ictest_* locals in IC Pry."
 debugger
