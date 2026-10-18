@@ -145,7 +145,7 @@ module TmuxREPL
             pane.run!("pipe-pane", "-o", "-t", pane.pane_id, "cat >> #{shell_quote(log)}")
             command.map { |argument| shell_quote(argument) }.join(" ")
           else
-            "#{shell_quote(repl_executable)} --repl #{shell_quote(log)}"
+            "#{shell_quote(repl_executable)} --repl #{shell_quote(log)} #{shell_quote(@name)}"
           end
         end
         
