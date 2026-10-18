@@ -27,7 +27,7 @@ now = Time.local
 timestamp = now.to_s("%Y%m%d-%H%M%S")
 timestamp += "-#{now.nanosecond.to_s.rjust(9, '0')}"
 
-name_parts << "icr"
+name_parts << "ic"
 name_parts << timestamp
 
 TmuxREPL::Session.crystal_interpreter(name_parts.join("-")).start
