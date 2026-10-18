@@ -62,6 +62,23 @@ The core API covers server, session, window, and pane traversal; creating
 sessions and windows; splitting panes; sending keys; capturing pane output;
 self-location through tmux environment variables; and raw command execution.
 
+
+
+## IC context test
+
+Run `tmux.ictest` from inside a tmux pane. It splits the current window,
+starts `ic` with the interpreted test context, and stops at IC's Pry debugger.
+The REPL exposes locals created by that interpreted context, including
+`ictest_server`, `ictest_pane`, `ictest_window`, `ictest_session`,
+`ictest_parent_pane_id`, `ictest_started_at`, `ictest_process_id`, and
+`ictest_environment`. Use `continue` at the Pry prompt to resume the script
+and return to the pane shell.
+
+The `ic` executable must be available in the tmux pane's environment. Set
+`IC_EXECUTABLE` to its full path when needed. The REPL's locals belong to the
+IC-interpreted test context, so this exercises live Pry access to that context
+rather than introspecting arbitrary locals in a separate compiled process.
+
 See [docs/api.md](docs/api.md) for the API guide.
 
 ## Development
