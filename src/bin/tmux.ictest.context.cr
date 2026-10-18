@@ -13,5 +13,5 @@ ictest_parent_pane = if parent_pane_id = ictest_parent_pane_id
 end
 ictest_environment = ENV.to_h
 
-puts "tmux.ictest is ready; use the IC Pry prompt to inspect ictest_* locals."
+puts "tmux.ictest is ready; continue at the debugger prompt to return to the pane shell."
 debugger
