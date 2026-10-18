@@ -1,41 +1,44 @@
+require "time"
 require "../tmux"
 
 module TmuxICTest
-  def self.context_script : String
-    executable = Process.executable_path || File.expand_path(PROGRAM_NAME)
-    directory = File.dirname(executable)
-    candidates = [
-      File.expand_path("tmux.ictest.context.cr", directory),
-      File.expand_path("../src/bin/tmux.ictest.context.cr", directory),
-      File.expand_path("src/bin/tmux.ictest.context.cr", Dir.current),
-    ]
-
-    candidates.each do |path|
-      return path if File.file?(path)
+  def self.bootstrap
+    unless ENV["TMUX"]? && ENV["TMUX_PANE"]?
+      STDERR.puts "tmux.ictest must be run inside a tmux pane."
+      exit 2
     end
 
-    raise "Cannot find tmux.ictest.context.cr; run from the tmux-repl checkout or install the context script beside tmux.ictest"
+    executable = Process.executable_path || File.expand_path(PROGRAM_NAME)
+    directory = File.dirname(executable)
+    source_candidates = [
+      File.expand_path(File.join(directory, "tmux.ictest.cr")),
+      File.expand_path(File.join(directory, "../src/bin/tmux.ictest.cr")),
+      File.expand_path(File.join(directory, "../src.source/bin/tmux.ictest.cr")),
+      File.expand_path(__FILE__),
+      File.expand_path("src/bin/tmux.ictest.cr"),
+      File.expand_path("src.source/bin/tmux.ictest.cr"),
+    ]
+    source = source_candidates.find { |path| File.file?(path) }
+    unless source
+      STDERR.puts "Cannot locate tmux.ictest.cr; keep the source beside tmux.ictest or run from the repository."
+      exit 2
+    end
+
+    ENV["TMUX_ICTEST_INTERPRETED"] = "1"
+    Process.exec(ENV["IC_EXECUTABLE"]? || "ic", [source])
   end
-
-  def self.shell_quote(value : String) : String
-    "'#{value.gsub("'", "'\\''")}'"
-  end
 end
 
-if ARGV.includes?("--help") || ARGV.includes?("-h")
-  puts "Usage: tmux.ictest"
-  puts "Split the current tmux window and open IC Pry with the test context."
-  exit
-end
+TmuxICTest.bootstrap unless ENV["TMUX_ICTEST_INTERPRETED"]? == "1"
+ENV.delete("TMUX_ICTEST_INTERPRETED")
 
-unless ENV["TMUX"]? && ENV["TMUX_PANE"]?
-  STDERR.puts "tmux.ictest must be run inside a tmux pane."
-  exit 2
-end
+ictest_started_at = Time.local
+ictest_process_id = Process.pid
+ictest_server = Tmux::Server.from_env
+ictest_pane = Tmux::Pane.from_env
+ictest_window = ictest_pane.window
+ictest_session = ictest_pane.session
+ictest_environment = ENV.to_h
 
-caller_pane = Tmux::Pane.from_env
-context_script = TmuxICTest.context_script
-ic_executable = ENV["IC_EXECUTABLE"]? || "ic"
-command = "TMUX_ICTEST_PARENT_PANE=#{TmuxICTest.shell_quote(caller_pane.pane_id)} #{TmuxICTest.shell_quote(ic_executable)} #{TmuxICTest.shell_quote(context_script)}"
-
-caller_pane.split(:right, detached: false).send_keys(command, literal: true)
+puts "tmux.ictest is ready; inspect ictest_* locals in IC Pry."
+debugger
