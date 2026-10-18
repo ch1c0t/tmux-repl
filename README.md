@@ -35,7 +35,9 @@ TmuxREPL::Session.crystal_interpreter("crystal-dev", "/opt/crystal/bin/icr").sta
 
 Call `.stop` on a `TmuxREPL::Session` with the same name to stop the session.
 When launched inside tmux, `.start` switches the current client to the REPL
-session; when launched outside tmux, it attaches a client.
+session; when launched outside tmux, it attaches a client. Use
+`.start(focus: false)` to create or ensure the session without attaching or
+switching clients, which is useful when managing REPLs from another program.
 
 ## Crystal API
 
