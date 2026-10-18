@@ -5,6 +5,38 @@ A two-pane command REPL for tmux, implemented in Crystal.
 The `tmux.repl` command runs an input REPL in the left pane. Results are
 appended to a per-session log and followed by `tmux.show` in the right pane.
 
+## Tmux REPL library
+
+Require `tmux_repl` to create a named two-pane REPL session from Crystal code.
+The default session runs the existing shell-command REPL:
+
+```crystal
+require "tmux_repl"
+
+TmuxREPL::Session.new("shell").start
+```
+
+Pass a command argument array to run a native interactive REPL instead. Its
+pane output is copied to the session log and followed in the right pane:
+
+```crystal
+require "tmux_repl"
+
+TmuxREPL::Session.new("python", command: ["python3", "-i"]).start
+TmuxREPL::Session.crystal_interpreter.start
+```
+
+The Crystal preset runs `icr` (Crystal's interactive interpreter); its session
+name defaults to `crystal`. Override the name or executable when needed:
+
+```crystal
+TmuxREPL::Session.crystal_interpreter("crystal-dev", "/opt/crystal/bin/icr").start
+```
+
+Call `.stop` on a `TmuxREPL::Session` with the same name to stop the session.
+When launched inside tmux, `.start` switches the current client to the REPL
+session; when launched outside tmux, it attaches a client.
+
 ## Crystal API
 
 The shard also exposes a top-level `Tmux` module with an object model inspired
