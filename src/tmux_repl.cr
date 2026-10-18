@@ -174,7 +174,7 @@ module TmuxREPL
       end
     end
     
-    def self.crystal_interpreter(name : String = "crystal", executable : String = "icr") : Session
+    def self.crystal_interpreter(name : String = "crystal", executable : String = "ic") : Session
       new(name, command: [executable])
     end
     
