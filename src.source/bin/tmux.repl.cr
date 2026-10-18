@@ -10,7 +10,7 @@ when "--repl"
     STDERR.puts "Missing output log path."
     exit 2
   end
-  TmuxREPL.run_repl(path)
+  TmuxREPL.run_repl(path, ARGV[2]?)
 else
   STDERR.puts "Unknown command or arguments."
   print_help
