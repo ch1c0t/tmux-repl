@@ -12,4 +12,7 @@ dependencies:
   reply:
     github: I3oris/reply
     version: "~> 0.4.0"
-crystal: ">= 1.15.1"
+  global-amqp_channel:
+    github: ch1c0t/crystal.global-amqp_channel
+    version: "~> 0.1.0"
+crystal: ">= 1.21.0"
