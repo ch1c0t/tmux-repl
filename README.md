@@ -32,6 +32,21 @@ session; when launched outside tmux, it attaches a client. Use
 `.start(focus: false)` to create or ensure the session without attaching or
 switching clients, which is useful when managing REPLs from another program.
 
+## LavinMQ command streams
+
+Each `tmux.repl` shell-command session declares a durable LavinMQ Stream named
+`tmux.repl.<session>.commands` (the session-name component is sanitized for a
+queue name). Set `LAVINMQ_AMQP_UNIXSOCKET` to the Unix socket path exposed by
+your LavinMQ instance; the REPL uses
+[global-amqp_channel](https://github.com/ch1c0t/crystal.global-amqp_channel)
+to publish on the shared AMQP channel.
+
+Every non-empty command is published and publisher-confirmed before execution
+as a persistent JSON message containing `type`, `session`, `sequence`,
+`timestamp`, and `command`. If publishing fails or LavinMQ does not confirm
+the message, the command is not executed. Streams are durable and retained after
+the REPL exits.
+
 ## Crystal API
 
 The shard also exposes a top-level `Tmux` module with an object model inspired
