@@ -1,6 +1,14 @@
 version: 2.0
 shards:
+  amq-protocol:
+    git: https://github.com/cloudamqp/amq-protocol.cr.git
+    version: 1.3.1
+  amqp-client:
+    git: https://github.com/cloudamqp/amqp-client.cr.git
+    version: 1.3.4
+  global-amqp_channel:
+    git: https://github.com/ch1c0t/crystal.global-amqp_channel.git
+    version: 0.1.0
   reply:
     git: https://github.com/i3oris/reply.git
     version: 0.4.0
-
