@@ -92,14 +92,14 @@ module TmuxREPL
           input_pane = window.active_pane
           output_pane = input_pane.split(:right, detached: true)
           window.select_layout("even-horizontal")
-
+        
           input = input_command(input_pane, log)
           output = "#{shell_quote(show_executable)} #{shell_quote(log)}"
           input_pane.send_keys(input, literal: true)
           output_pane.send_keys(output, literal: true)
           input_pane.select
         end
-
+        
         private def input_command(pane : Tmux::Pane, log : String) : String
           if command = @command
             pane.run!("pipe-pane", "-o", "-t", pane.pane_id, "cat >> #{shell_quote(log)}")
@@ -170,10 +170,10 @@ module TmuxREPL
     def initialize(@name : String, @command : Array(String)? = nil)
       raise ArgumentError.new("Invalid tmux session name") unless @name.matches?(/\A[a-zA-Z0-9_-]+\z/)
       if command = @command
-    raise ArgumentError.new("REPL command must not be empty") if command.empty?
-  end
+        raise ArgumentError.new("REPL command must not be empty") if command.empty?
+      end
     end
-
+    
     def self.crystal_interpreter(name : String = "crystal", executable : String = "icr") : Session
       new(name, command: [executable])
     end
