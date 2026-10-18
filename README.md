@@ -24,14 +24,6 @@ pane output is copied to the session log and followed in the right pane:
 require "tmux_repl"
 
 TmuxREPL::Session.new("python", command: ["python3", "-i"]).start
-TmuxREPL::Session.crystal_interpreter.start
-```
-
-The Crystal preset runs `ic` (I3oris/ic, an interface to the Crystal interpreter); its session
-name defaults to `crystal`. Override the name or executable when needed:
-
-```crystal
-TmuxREPL::Session.crystal_interpreter("crystal-dev", "/opt/crystal/bin/ic").start
 ```
 
 Call `.stop` on a `TmuxREPL::Session` with the same name to stop the session.
@@ -62,34 +54,11 @@ The core API covers server, session, window, and pane traversal; creating
 sessions and windows; splitting panes; sending keys; capturing pane output;
 self-location through tmux environment variables; and raw command execution.
 
-## IC test REPL
-
-Run `tmux.ictest` from inside a tmux pane. It replaces itself with `ic` in
-the **same pane** and interprets the `tmux.ictest` source file itself; it does
-not create another pane or launch a separate context script. The script enters
-IC's Pry debugger with live locals for the current Tmux server, pane, window,
-session, process ID, start time, and environment:
-
-```crystal
-ictest_server
-ictest_pane
-ictest_window
-ictest_session
-ictest_process_id
-ictest_started_at
-ictest_environment
-```
-
-Use `continue` to leave Pry; the script finishes and the pane returns to its
-shell. `ic` must be on `PATH`, or set `IC_EXECUTABLE` to its full path.
-Because the executable hands off to IC to interpret its own source, the source
-file must remain available beside the built executable or in the checkout.
-
 ## Development
 
 ```sh
 shards install
-shards build
+bundle exec rake
 crystal spec
 ```
 
