@@ -27,6 +27,7 @@ describe TmuxREPL::Session do
       TmuxREPL::Session.new("empty", command: [] of String)
     end
   end
+
   it "captures output from an interactive REPL command" do
     name = "repl_spec_#{Process.pid}"
     state_home = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-repl-e2e-#{Process.pid}")
@@ -34,7 +35,7 @@ describe TmuxREPL::Session do
     previous_state_home = ENV["XDG_STATE_HOME"]?
     ENV["XDG_STATE_HOME"] = state_home
     session = TmuxREPL::Session.new(name, command: [
-      "sh", "-c", "printf 'TMUX_REPL_LIBRARY_E2E'; sleep 1"
+      "sh", "-c", "printf '%s%s' 'TMUX_REPL_' 'LIBRARY_E2E'; sleep 1"
     ])
     found = false
 
