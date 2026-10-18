@@ -62,22 +62,28 @@ The core API covers server, session, window, and pane traversal; creating
 sessions and windows; splitting panes; sending keys; capturing pane output;
 self-location through tmux environment variables; and raw command execution.
 
-## IC context test
+## IC test REPL
 
-Run `tmux.ictest` from inside a tmux pane. It splits the current window,
-starts `ic` with the interpreted test context, and stops at IC's Pry debugger.
-The REPL exposes locals created by that interpreted context, including
-`ictest_server`, `ictest_pane`, `ictest_window`, `ictest_session`,
-`ictest_parent_pane_id`, `ictest_started_at`, `ictest_process_id`, and
-`ictest_environment`. Use `continue` at the Pry prompt to resume the script
-and return to the pane shell.
+Run `tmux.ictest` from inside a tmux pane. It replaces itself with `ic` in
+the **same pane** and interprets the `tmux.ictest` source file itself; it does
+not create another pane or launch a separate context script. The script enters
+IC's Pry debugger with live locals for the current Tmux server, pane, window,
+session, process ID, start time, and environment:
 
-The `ic` executable must be available in the tmux pane's environment. Set
-`IC_EXECUTABLE` to its full path when needed. The REPL's locals belong to the
-IC-interpreted test context, so this exercises live Pry access to that context
-rather than introspecting arbitrary locals in a separate compiled process.
+```crystal
+ictest_server
+ictest_pane
+ictest_window
+ictest_session
+ictest_process_id
+ictest_started_at
+ictest_environment
+```
 
-See [docs/api.md](docs/api.md) for the API guide.
+Use `continue` to leave Pry; the script finishes and the pane returns to its
+shell. `ic` must be on `PATH`, or set `IC_EXECUTABLE` to its full path.
+Because the executable hands off to IC to interpret its own source, the source
+file must remain available beside the built executable or in the checkout.
 
 ## Development
 
