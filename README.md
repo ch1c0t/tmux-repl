@@ -62,8 +62,6 @@ The core API covers server, session, window, and pane traversal; creating
 sessions and windows; splitting panes; sending keys; capturing pane output;
 self-location through tmux environment variables; and raw command execution.
 
-
-
 ## IC context test
 
 Run `tmux.ictest` from inside a tmux pane. It splits the current window,
