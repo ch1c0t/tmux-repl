@@ -27,11 +27,11 @@ TmuxREPL::Session.new("python", command: ["python3", "-i"]).start
 TmuxREPL::Session.crystal_interpreter.start
 ```
 
-The Crystal preset runs `icr` (Crystal's interactive interpreter); its session
+The Crystal preset runs `ic` (I3oris/ic, an interface to the Crystal interpreter); its session
 name defaults to `crystal`. Override the name or executable when needed:
 
 ```crystal
-TmuxREPL::Session.crystal_interpreter("crystal-dev", "/opt/crystal/bin/icr").start
+TmuxREPL::Session.crystal_interpreter("crystal-dev", "/opt/crystal/bin/ic").start
 ```
 
 Call `.stop` on a `TmuxREPL::Session` with the same name to stop the session.
