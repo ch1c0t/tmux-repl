@@ -67,7 +67,7 @@ module TmuxREPL
   
     module Start
       module CreateSession
-        private def create_session(server : Tmux::Server) : Nil
+        private def create_session(server : Tmux::Server, focus : Bool) : Nil
           dir = state_dir
           session : Tmux::Session? = nil
         
@@ -79,7 +79,7 @@ module TmuxREPL
             created = server.new_session(name: @name, detached: true)
             session = created
             configure_session(created, log)
-            activate(created)
+            activate(created) if focus
           rescue ex
             cleanup_failed_start(server, session, dir)
             STDERR.puts "tmux.repl: #{ex.message}"
@@ -122,12 +122,12 @@ module TmuxREPL
         end
       end
     
-      def start : Nil
+      def start(focus : Bool = true) : Nil
         server = current_server
         if session = find_session(server)
-          activate(session)
+          activate(session) if focus
         else
-          create_session(server)
+          create_session(server, focus)
         end
       end
       
