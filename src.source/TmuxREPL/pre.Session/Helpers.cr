@@ -5,7 +5,8 @@ end
 
 private def repl_executable : String
   path = File.expand_path(PROGRAM_NAME)
-  File::Info.executable?(path) ? path : "tmux.repl"
+  return path if File.basename(path) == "tmux.repl" && File::Info.executable?(path)
+  "tmux.repl"
 end
 
 private def show_executable : String
