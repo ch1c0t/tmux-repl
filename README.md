@@ -1,9 +1,10 @@
 # tmux-repl
 
-A two-pane command REPL for tmux, implemented in Crystal.
+A reusable two-pane Tmux REPL library and command-line tools, implemented in Crystal.
 
-The `tmux.repl` command runs an input REPL in the left pane. Results are
-appended to a per-session log and followed by `tmux.show` in the right pane.
+The `tmux.repl` executable provides a shell-command REPL. The library can also
+launch native interactive REPLs, pipe their pane output into a session log, and
+follow that log in the right pane with `tmux.show`.
 
 ## Tmux REPL library
 
