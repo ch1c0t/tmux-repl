@@ -4,7 +4,7 @@ describe "TmuxREPL::Session.crystal_interpreter" do
   it "provides a Crystal interpreter preset" do
     session = TmuxREPL::Session.crystal_interpreter
     session.name.should eq("crystal")
-    session.command.should eq(["icr"])
+    session.command.should eq(["ic"])
   end
 
   it "allows overriding the Crystal interpreter executable" do

@@ -4,8 +4,8 @@ version: 0.1.0
 authors:
 - Anatoly Chernov <chertoly@gmail.com>
 targets:
-  tmux.icr:
-    main: src/bin/tmux.icr.cr
+  tmux.ic:
+    main: src/bin/tmux.ic.cr
   tmux.repl:
     main: src/bin/tmux.repl.cr
   tmux.show:
