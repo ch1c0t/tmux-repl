@@ -168,7 +168,6 @@ module TmuxREPL
     getter command : Array(String)?
     
     def initialize(@name : String, @command : Array(String)? = nil)
-      raise ArgumentError.new("Invalid tmux session name") unless @name.matches?(/\A[a-zA-Z0-9_-]+\z/)
       if command = @command
         raise ArgumentError.new("REPL command must not be empty") if command.empty?
       end
