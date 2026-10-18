@@ -1,3 +1,19 @@
+require "./tmux.ictest.context/*"
+
+VERSION = "0.1.0"
+
+case ARGV.size
+when 1
+  case ARGV[0]
+  when "-v", "version", "--version"
+    puts VERSION
+    exit
+  when "-h", "help", "--help"
+    print_help
+    exit
+  end
+end
+
 require "time"
 require "../tmux"
 
@@ -13,5 +29,10 @@ ictest_parent_pane = if parent_pane_id = ictest_parent_pane_id
 end
 ictest_environment = ENV.to_h
 
+def ocr
+  puts "from #ocr"
+end
+
 puts "tmux.ictest is ready; continue at the debugger prompt to return to the pane shell."
+debugger
 debugger

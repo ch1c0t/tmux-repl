@@ -6,6 +6,8 @@ authors:
 targets:
   tmux.ic:
     main: src/bin/tmux.ic.cr
+  tmux.ictest.context:
+    main: src/bin/tmux.ictest.context.cr
   tmux.ictest:
     main: src/bin/tmux.ictest.cr
   tmux.repl:
