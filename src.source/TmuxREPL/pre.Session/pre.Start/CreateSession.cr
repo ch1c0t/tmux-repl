@@ -1,4 +1,4 @@
-private def create_session(server : Tmux::Server) : Nil
+private def create_session(server : Tmux::Server, focus : Bool) : Nil
   dir = state_dir
   session : Tmux::Session? = nil
 
@@ -10,7 +10,7 @@ private def create_session(server : Tmux::Server) : Nil
     created = server.new_session(name: @name, detached: true)
     session = created
     configure_session(created, log)
-    activate(created)
+    activate(created) if focus
   rescue ex
     cleanup_failed_start(server, session, dir)
     STDERR.puts "tmux.repl: #{ex.message}"
