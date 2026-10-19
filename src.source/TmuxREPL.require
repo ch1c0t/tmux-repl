@@ -2,4 +2,5 @@ file_utils
 json
 reply
 ./tmux
+pty
 global-amqp_channel
