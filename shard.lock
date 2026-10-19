@@ -14,7 +14,7 @@ shards:
 
   pty:
     git: https://github.com/ch1c0t/crystal.pty.git
-    version: 0.1.0+git.commit.69d8d4b96aeea8af1abbc0c98cc7889ec5157db1
+    version: 0.1.0+git.commit.6fb0a5b45f494cafa3ce1c2c584f04916f6d9cc0
 
   reply:
     git: https://github.com/i3oris/reply.git
