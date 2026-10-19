@@ -11,7 +11,7 @@ targets:
 dependencies:
   pty:
     github: ch1c0t/crystal.pty
-    commit: 97f9596c08b9a03b73bf0738665204245b3a847d
+    commit: 69d8d4b96aeea8af1abbc0c98cc7889ec5157db1
   reply:
     github: I3oris/reply
     version: "~> 0.4.0"
