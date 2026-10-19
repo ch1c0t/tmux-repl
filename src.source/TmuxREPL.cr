@@ -1,24 +1,32 @@
-record Result, command : String, stdout : String, stderr : String, status : Int32
+record Result, command : String, output : String, status : Int32
 
 def self.execute(command : String) : Result
-  stdout = IO::Memory.new
-  stderr = IO::Memory.new
-  status = Process.run("/bin/sh", ["-c", command], output: stdout, error: stderr)
-  Result.new(command, stdout.to_s, stderr.to_s, status.exit_code)
-rescue ex
-  Result.new(command, "", ex.message || ex.class.name, 1)
+  execute(command) { |_chunk| }
+end
+
+def self.execute(command : String, &stream_callback : String -> Nil) : Result
+  output, status = PTY.run(["/bin/sh", "-c", command], &stream_callback)
+  Result.new(command, output, status)
 end
 
 def self.write_result(path : String, result : Result) : Nil
+  begin_result(path, result.command)
+  append_output(path, result.output)
+  finish_result(path, result)
+end
+
+def self.begin_result(path : String, command : String) : Nil
+  File.open(path, "a") { |io| io.puts "$ #{command}" }
+end
+
+def self.append_output(path : String, output : String) : Nil
+  return if output.empty?
+  File.open(path, "a") { |io| io.print output }
+end
+
+def self.finish_result(path : String, result : Result) : Nil
   File.open(path, "a") do |io|
-    io.puts "$ #{result.command}"
-    io.print result.stdout unless result.stdout.empty?
-    if !result.stderr.empty?
-      io.puts unless result.stdout.empty? || result.stdout.ends_with?("\n")
-      io.print result.stderr
-    end
-    last = result.stderr.empty? ? result.stdout : result.stderr
-    io.puts unless last.empty? || last.ends_with?("\n")
+    io.puts unless result.output.empty? || result.output.ends_with?("\n")
     io.puts "[exit status: #{result.status}]"
     io.puts
   end
@@ -31,7 +39,9 @@ def self.run_repl(path : String, session_name : String? = nil) : Nil
   reader.read_loop do |expression|
     next if expression.strip.empty?
     stream.publish(expression)
-    write_result(path, execute(expression))
+    begin_result(path, expression)
+    result = execute(expression) { |chunk| append_output(path, chunk) }
+    finish_result(path, result)
   end
 end
 
