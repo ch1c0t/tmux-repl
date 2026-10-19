@@ -8,13 +8,20 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       LAVINMQ_AMQP_UNIXSOCKET: /tmp/lavinmq/amqp.sock
     steps:
       - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
       - uses: crystal-lang/install-crystal@v1
         with:
           crystal: "1.22"
+      - name: Generate Crystal sources
+        run: bundle exec bgem
       - name: Install tmux
         run: |
           sudo apt-get update
@@ -30,10 +37,7 @@ jobs:
           EOF
 
           docker rm --force lavinmq >/dev/null 2>&1 || true
-          docker run --detach --name lavinmq \
-            --mount type=bind,source=/tmp/lavinmq,target=/tmp/lavinmq \
-            --mount "type=bind,source=$RUNNER_TEMP/lavinmq.ini,target=/etc/lavinmq/lavinmq.ini,readonly" \
-            cloudamqp/lavinmq:2.10.2
+          docker run --detach --name lavinmq             --mount type=bind,source=/tmp/lavinmq,target=/tmp/lavinmq             --mount "type=bind,source=$RUNNER_TEMP/lavinmq.ini,target=/etc/lavinmq/lavinmq.ini,readonly"             cloudamqp/lavinmq:2.10.2
 
           for attempt in $(seq 1 60); do
             if [ -S "$LAVINMQ_AMQP_UNIXSOCKET" ]; then
