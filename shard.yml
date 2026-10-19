@@ -9,6 +9,9 @@ targets:
   tmux.show:
     main: src/bin/tmux.show.cr
 dependencies:
+  pty:
+    github: ch1c0t/crystal.pty
+    commit: 97f9596c08b9a03b73bf0738665204245b3a847d
   reply:
     github: I3oris/reply
     version: "~> 0.4.0"
