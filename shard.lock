@@ -12,7 +12,10 @@ shards:
     git: https://github.com/ch1c0t/crystal.global-amqp_channel.git
     version: 0.1.0+git.commit.692a8125d6a6c9d2d0c13685ee18cf27bb1abedb
 
+  pty:
+    git: https://github.com/ch1c0t/crystal.pty.git
+    version: 0.1.0+git.commit.97f9596c08b9a03b73bf0738665204245b3a847d
+
   reply:
     git: https://github.com/i3oris/reply.git
     version: 0.4.0
-
