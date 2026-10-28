@@ -5,7 +5,7 @@ def new_session(
   start_directory : String? = nil,
   command : Array(String)? = nil
 ) : Session
-  args = ["new-session", "-d", "-P", "-F", "#{session_id}"]
+  args = ["new-session", "-d", "-P", "-F", "\\#{session_id}"]
   args.concat(["-s", name]) if name
   args.concat(["-n", window_name]) if window_name
   args.concat(["-c", start_directory]) if start_directory
