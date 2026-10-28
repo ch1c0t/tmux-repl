@@ -17,8 +17,8 @@ describe Tmux::Server do
       split = pane.split(:right, detached: true)
       split.window.window_id.should eq(window.window_id)
 
-      left = pane.display_message("\\#{pane_left}").to_i
-      right = split.display_message("\\#{pane_left}").to_i
+      left = pane.display_message("\#{pane_left}").to_i
+      right = split.display_message("\#{pane_left}").to_i
       right.should be > left
 
       pane.send_keys("printf 'TMUX_API_READY'")
