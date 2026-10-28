@@ -24,7 +24,7 @@ Process.on_terminate do |_reason|
   shutdown.send(nil)
 end
 
-session : PTY::Session? = nil
+session = PTY::Session.new(:sh)
 
 begin
   channel = Global.amqp_channel
@@ -34,9 +34,7 @@ begin
   File.write(startup_stage_path, "declaring event stream")
   events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
   File.write(startup_stage_path, "starting PTY session")
-  session = PTY::Session.new(:sh)
-  running_session = session.not_nil!
-  running_session.start
+  session.start
 
   consumer_tag = commands.subscribe(
     no_ack: false,
@@ -49,7 +47,7 @@ begin
         sequence = data["sequence"].as_i64.to_u64
         command = data["command"].as_s
         TmuxREPL.publish_event(events, "started", session_name, sequence, command: command)
-        result = running_session.run(command) do |chunk|
+        result = session.run(command) do |chunk|
           TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: chunk)
         end
         TmuxREPL.publish_event(events, "complete", session_name, sequence, command: command, status: result.status)
@@ -72,11 +70,9 @@ rescue ex
   STDERR.puts "tmux.repl.worker: #{ex.class}: #{ex.message}"
   exit 1
 ensure
-  if running_session = session
-    begin
-      running_session.terminate
-    rescue
-    end
+  begin
+    session.terminate
+  rescue
   end
   File.delete(ready_path) if File.exists?(ready_path)
 end
