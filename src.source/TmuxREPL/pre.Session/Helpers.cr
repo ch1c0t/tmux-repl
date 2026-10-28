@@ -4,21 +4,25 @@ private def state_dir : String
 end
 
 private def repl_executable : String
-  path = File.expand_path(PROGRAM_NAME)
-  return path if File.basename(path) == "tmux.repl" && File::Info.executable?(path)
-  "tmux.repl"
+  sibling_executable("tmux.repl")
+end
+
+private def input_executable : String
+  sibling_executable("tmux.repl.input")
+end
+
+private def output_executable : String
+  sibling_executable("tmux.repl.output")
 end
 
 private def worker_executable : String
-  path = File.expand_path(PROGRAM_NAME)
-  sibling = File.join(File.dirname(path), "tmux.repl.input")
-  File::Info.executable?(sibling) ? sibling : "tmux.repl.input"
+  sibling_executable("tmux.repl.worker")
 end
 
-private def show_executable : String
+private def sibling_executable(name : String) : String
   path = File.expand_path(PROGRAM_NAME)
-  sibling = File.join(File.dirname(path), "tmux.show")
-  File::Info.executable?(sibling) ? sibling : "tmux.show"
+  sibling = File.join(File.dirname(path), name)
+  File::Info.executable?(sibling) ? sibling : name
 end
 
 private def shell_quote(value : String) : String
