@@ -6,7 +6,9 @@ describe "LavinMQ-backed REPL processes" do
     state_home = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-repl-lavinmq-#{Process.pid}")
     worker_pid_path = File.join(state_home, "tmux-repl", name, "worker.pid")
     previous_state_home = ENV["XDG_STATE_HOME"]?
+    previous_path = ENV["PATH"]?
     ENV["XDG_STATE_HOME"] = state_home
+    ENV["PATH"] = "#{File.expand_path("bin")}:#{previous_path || ""}"
     repl = TmuxREPL::Session.new(name)
     started = false
 
@@ -43,6 +45,7 @@ describe "LavinMQ-backed REPL processes" do
     ensure
       repl.stop if started
       ENV["XDG_STATE_HOME"] = previous_state_home
+      ENV["PATH"] = previous_path
       FileUtils.rm_rf(state_home)
     end
   end
