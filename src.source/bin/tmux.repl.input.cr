@@ -27,8 +27,11 @@ end
 base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
 state_dir = File.join(base, "tmux-repl", session_name)
 input_pid_path = File.join(state_dir, "input.pid")
+startup_error_path = File.join(state_dir, "input.error")
+File.delete(startup_error_path) if File.exists?(startup_error_path)
 
-channel = Global.amqp_channel
+begin
+  channel = Global.amqp_channel
 commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
 events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
 reader = TmuxREPLInputReader.new(input_pid_path)
@@ -36,7 +39,6 @@ sequence = 0_u64
 selected_sequence : UInt64? = nil
 history = [] of Tuple(UInt64, String)
 
-begin
   reader.read_loop do |expression|
     next if expression.strip.empty?
     control = expression.strip
@@ -109,6 +111,10 @@ begin
     TmuxREPL.publish_command(commands, session_name, sequence, expression)
     puts "[input ##{sequence}] submitted. Use :select ID, :prev, :next, :list, or :help."
   end
+rescue ex
+  File.write(startup_error_path, "#{ex.class}: #{ex.message}")
+  STDERR.puts "tmux.repl.input: #{ex.class}: #{ex.message}"
+  exit 1
 ensure
   File.delete(input_pid_path) if File.exists?(input_pid_path)
 end
