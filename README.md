@@ -2,14 +2,41 @@
 
 A reusable two-pane Tmux REPL library and command-line tools, implemented in Crystal.
 
-The `tmux.repl` executable provides a shell-command REPL. The library can also
-launch native interactive REPLs, pipe their pane output into a session log, and
-follow that log in the right pane with `tmux.show`.
+The `tmux.repl` executable manages the Tmux session. The left and right panes run
+separate frontends, while a background PTY worker executes shell commands. The
+processes are isolated so `reply` and `crystal.pty` are never imported by the same
+executable.
+
+## Executable roles
+
+- `tmux.repl` creates, activates, and stops a named two-pane session.
+- `tmux.repl.input` uses `Reply::Reader` in the left pane and publishes commands.
+- `tmux.repl.output` renders the selected input and only its associated output.
+- `tmux.repl.worker` executes commands through `PTY::Session` and publishes output.
+
+Build all four executables with:
+
+```sh
+shards build
+```
+
+Start a REPL session with `tmux.repl start [SESSION]`; stop it with
+`tmux.repl stop [SESSION]`.
+
+When the left pane is active, submit shell commands as usual. Each input gets an
+ID. Use these controls in the left pane to select which input is shown on the right:
+
+```text
+:list       List submitted inputs
+:select ID  Display the output associated with a specific input
+:prev       Select the previous input
+:next       Select the next input
+:help       Show these controls
+```
 
 ## Tmux REPL library
 
-Require `tmux_repl` to create a named two-pane REPL session from Crystal code.
-The default session runs the existing shell-command REPL:
+Require `tmux_repl` to create a named two-pane REPL session from Crystal code:
 
 ```crystal
 require "tmux_repl"
@@ -18,7 +45,7 @@ TmuxREPL::Session.new("shell").start
 ```
 
 Pass a command argument array to run a native interactive REPL instead. Its
-pane output is copied to the session log and followed in the right pane:
+pane output is copied to a session log and followed in the right pane:
 
 ```crystal
 require "tmux_repl"
@@ -30,24 +57,18 @@ Call `.stop` on a `TmuxREPL::Session` with the same name to stop the session.
 When launched inside tmux, `.start` switches the current client to the REPL
 session; when launched outside tmux, it attaches a client. Use
 `.start(focus: false)` to create or ensure the session without attaching or
-switching clients, which is useful when managing REPLs from another program.
+switching clients.
 
-## LavinMQ command streams
+## LavinMQ streams
 
-Each `tmux.repl` shell-command session declares a durable LavinMQ Stream named
-`tmux.repl.<session>.commands` (the session-name component is sanitized for a
-queue name). Set `LAVINMQ_AMQP_UNIXSOCKET` to the Unix socket path exposed by
-your LavinMQ instance; the REPL uses
-[global-amqp_channel](https://github.com/ch1c0t/crystal.global-amqp_channel)
-to publish on the shared AMQP channel.
+Each shell-command session uses two durable LavinMQ streams:
+`tmux.repl.<session>.commands` and `tmux.repl.<session>.events`. Stream messages
+include the session name, input sequence, timestamp, and command or output data.
+Set `LAVINMQ_AMQP_UNIXSOCKET` to the Unix socket path exposed by LavinMQ; the
+REPL uses [global-amqp_channel](https://github.com/ch1c0t/crystal.global-amqp_channel)
+for AMQP communication.
 
-Every non-empty command is published and publisher-confirmed before execution
-as a persistent JSON message containing `type`, `session`, `sequence`,
-`timestamp`, and `command`. If publishing fails or LavinMQ does not confirm
-the message, the command is not executed. Streams are durable and retained after
-the REPL exits.
-
-## Crystal API
+## Crystal Tmux API
 
 The shard also exposes a top-level `Tmux` module with an object model inspired
 by [libtmux](https://github.com/tmux-python/libtmux):
@@ -77,4 +98,4 @@ bundle exec rake
 crystal spec
 ```
 
-The API's end-to-end spec starts a separate tmux server using a unique socket.
+The API end-to-end spec starts a separate Tmux server using a unique socket.

@@ -37,4 +37,49 @@ describe Tmux::Server do
       end
     end
   end
+
+  it "starts session and split-pane commands with explicit command arguments" do
+    socket_name = "crystal_tmux_direct_api_spec_#{Process.pid}"
+    server = Tmux::Server.new(socket_name)
+
+    begin
+      session = server.new_session(
+        "direct-api-spec",
+        detached: true,
+        command: ["/bin/sh", "-c", "printf 'TMUX_DIRECT_SESSION_READY'; sleep 5"]
+      )
+      pane = session.active_window.active_pane
+      found_session = false
+      deadline = Time.instant + 3.seconds
+      while Time.instant < deadline
+        if pane.capture_pane.join("\n").includes?("TMUX_DIRECT_SESSION_READY")
+          found_session = true
+          break
+        end
+        sleep 25.milliseconds
+      end
+      found_session.should be_true
+
+      split = pane.split(
+        :right,
+        detached: true,
+        command: ["/bin/sh", "-c", "printf 'TMUX_DIRECT_SPLIT_READY'; sleep 5"]
+      )
+      found_split = false
+      deadline = Time.instant + 3.seconds
+      while Time.instant < deadline
+        if split.capture_pane.join("\n").includes?("TMUX_DIRECT_SPLIT_READY")
+          found_split = true
+          break
+        end
+        sleep 25.milliseconds
+      end
+      found_split.should be_true
+    ensure
+      begin
+        server.kill_server
+      rescue Tmux::Error
+      end
+    end
+  end
 end

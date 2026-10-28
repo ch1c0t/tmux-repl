@@ -1,18 +1,35 @@
+private def amqp_environment : Hash(String, String)
+  socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]?
+  raise "Missing critical environment configuration variable: LAVINMQ_AMQP_UNIXSOCKET" unless socket_path
+
+  {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+end
+
 private def state_dir : String
   base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
   File.join(base, "tmux-repl", @name)
 end
 
 private def repl_executable : String
-  path = File.expand_path(PROGRAM_NAME)
-  return path if File.basename(path) == "tmux.repl" && File::Info.executable?(path)
-  "tmux.repl"
+  sibling_executable("tmux.repl")
 end
 
-private def show_executable : String
+private def input_executable : String
+  sibling_executable("tmux.repl.input")
+end
+
+private def output_executable : String
+  sibling_executable("tmux.repl.output")
+end
+
+private def worker_executable : String
+  sibling_executable("tmux.repl.worker")
+end
+
+private def sibling_executable(name : String) : String
   path = File.expand_path(PROGRAM_NAME)
-  sibling = File.join(File.dirname(path), "tmux.show")
-  File::Info.executable?(sibling) ? sibling : "tmux.show"
+  sibling = File.join(File.dirname(path), name)
+  File::Info.executable?(sibling) ? sibling : name
 end
 
 private def shell_quote(value : String) : String

@@ -34,8 +34,14 @@ def active_pane : Pane
   raise Error.new("Window #{@window_id} has no active pane")
 end
 
-def split(direction : Symbol = :right, size : Int32? = nil, start_directory : String? = nil, detached : Bool = true) : Pane
-  active_pane.split(direction, size, start_directory, detached)
+def split(
+  direction : Symbol = :right,
+  size : Int32? = nil,
+  start_directory : String? = nil,
+  detached : Bool = true,
+  command : Array(String)? = nil
+) : Pane
+  active_pane.split(direction, size, start_directory, detached, command)
 end
 
 def rename(name : String) : Window
