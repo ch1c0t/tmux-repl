@@ -27,6 +27,11 @@ describe "LavinMQ-backed REPL processes" do
       end
 
       server = Tmux::Server.new
+      socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]?
+      socket_path.should_not be_nil
+      session_environment = server.cmd("show-environment", "-t", name, "LAVINMQ_AMQP_UNIXSOCKET")
+      session_environment.success?.should be_true
+      session_environment.stdout.strip.should eq("LAVINMQ_AMQP_UNIXSOCKET=#{socket_path}")
       tmux_session = server.session(name)
       panes = tmux_session.active_window.panes
       panes.size.should eq(2)
