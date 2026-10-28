@@ -25,9 +25,8 @@ commands.subscribe(no_ack: false, block: true, args: {"x-stream-offset": "next"}
       sequence = data["sequence"].as_i64.to_u64
       command = data["command"].as_s
       TmuxREPL.publish_event(events, "started", session_name, sequence, command: command)
-      result = session.run(command) do |chunk|
-        TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: chunk)
-      end
+      result = session.run(command)
+      TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: result.output)
       TmuxREPL.publish_event(events, "complete", session_name, sequence, command: command, status: result.status)
     end
     message.ack
