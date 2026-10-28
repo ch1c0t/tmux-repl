@@ -41,9 +41,9 @@ begin
   File.write(startup_stage_path, "initializing Reply reader")
   reader = TmuxREPLInputReader.new(input_pid_path)
   File.delete(startup_stage_path) if File.exists?(startup_stage_path)
-sequence = 0_u64
-selected_sequence : UInt64? = nil
-history = [] of Tuple(UInt64, String)
+  sequence = 0_u64
+  selected_sequence : UInt64? = nil
+  history = [] of Tuple(UInt64, String)
 
   reader.read_loop do |expression|
     next if expression.strip.empty?
