@@ -1,10 +1,12 @@
 require "./helper"
 
 describe "LavinMQ-backed REPL processes" do
-  it "runs the Reply input app and PTY worker as separate processes" do
+  it "selects one input and displays only its associated output" do
     name = "repl_lavinmq_spec_#{Process.pid}"
     state_home = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-repl-lavinmq-#{Process.pid}")
     worker_pid_path = File.join(state_home, "tmux-repl", name, "worker.pid")
+    input_pid_path = File.join(state_home, "tmux-repl", name, "input.pid")
+    output_pid_path = File.join(state_home, "tmux-repl", name, "output.pid")
     previous_state_home = ENV["XDG_STATE_HOME"]?
     previous_path = ENV["PATH"]?
     ENV["XDG_STATE_HOME"] = state_home
@@ -16,10 +18,12 @@ describe "LavinMQ-backed REPL processes" do
       repl.start(focus: false)
       started = true
 
-      deadline = Time.instant + 5.seconds
-      until File.exists?(worker_pid_path)
-        raise "PTY worker did not become ready" if Time.instant >= deadline
-        sleep 10.milliseconds
+      [input_pid_path, worker_pid_path, output_pid_path].each do |ready_path|
+        deadline = Time.instant + 5.seconds
+        until File.exists?(ready_path)
+          raise "REPL process did not become ready: #{ready_path}" if Time.instant >= deadline
+          sleep 10.milliseconds
+        end
       end
 
       server = Tmux::Server.new
@@ -29,32 +33,48 @@ describe "LavinMQ-backed REPL processes" do
       input_pane = panes[0]
       output_pane = panes[1]
 
-      input_pane.send_keys("printf 'TMUX_REPL_LAVINMQ_E2E'", literal: true)
+      input_pane.send_keys("printf 'FIRST_REPL_OUTPUT\\n'", literal: true)
 
-      found = false
+      first_found = false
       deadline = Time.instant + 5.seconds
       while Time.instant < deadline
-        if output_pane.capture_pane.join("\n").includes?("TMUX_REPL_LAVINMQ_E2E")
-          found = true
+        if output_pane.capture_pane.join("\\n").includes?("FIRST_REPL_OUTPUT")
+          first_found = true
           break
         end
         sleep 25.milliseconds
       end
-      unless found
-        diagnostics = "input pane:\n#{input_pane.capture_pane.join("\n")}\n" \
-                      "output pane:\n#{output_pane.capture_pane.join("\n")}"
-        begin
-          channel = Global.amqp_channel
-          command_queue = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(name))
-          event_queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(name))
-          diagnostics += "\ncommand stream messages: #{command_queue.message_count}"
-          diagnostics += "\nevent stream messages: #{event_queue.message_count}"
-        rescue ex
-          diagnostics += "\nqueue diagnostics failed: #{ex.message}"
+      first_found.should be_true
+
+      input_pane.send_keys("printf 'SECOND_REPL_OUTPUT\\n'", literal: true)
+
+      second_found = false
+      deadline = Time.instant + 5.seconds
+      while Time.instant < deadline
+        if output_pane.capture_pane.join("\\n").includes?("SECOND_REPL_OUTPUT")
+          second_found = true
+          break
         end
-        raise "REPL command did not reach output pane.\n#{diagnostics}"
+        sleep 25.milliseconds
       end
-      output_pane.capture_pane.join("\n").should contain("[exit status: 0]")
+      second_found.should be_true
+
+      input_pane.send_keys(":select 1", literal: true)
+
+      first_selected = false
+      deadline = Time.instant + 5.seconds
+      while Time.instant < deadline
+        visible = output_pane.capture_pane.join("\\n")
+        if visible.includes?("INPUT #1") && visible.includes?("FIRST_REPL_OUTPUT")
+          first_selected = true
+          break
+        end
+        sleep 25.milliseconds
+      end
+      first_selected.should be_true
+
+      visible = output_pane.capture_pane.join("\\n")
+      visible.should_not contain("SECOND_REPL_OUTPUT")
     ensure
       repl.stop if started
       ENV["XDG_STATE_HOME"] = previous_state_home
