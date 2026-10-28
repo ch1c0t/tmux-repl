@@ -17,13 +17,16 @@ base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state
 state_dir = File.join(base, "tmux-repl", session_name)
 output_pid_path = File.join(state_dir, "output.pid")
 startup_error_path = File.join(state_dir, "output.error")
+startup_stage_path = File.join(state_dir, "output.startup")
 File.delete(startup_error_path) if File.exists?(startup_error_path)
+File.write(startup_stage_path, "connecting to LavinMQ")
 events : AMQP::Client::Queue? = nil
 consumer_tag : String? = nil
 
 begin
   channel = Global.amqp_channel
   channel.prefetch(32)
+  File.write(startup_stage_path, "declaring event stream")
   event_queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
   events = event_queue
   inputs = {} of UInt64 => String
@@ -36,7 +39,8 @@ Process.on_terminate do |_reason|
   shutdown.send(nil)
 end
 
-consumer_tag = event_queue.subscribe(
+  File.write(startup_stage_path, "subscribing to event stream")
+  consumer_tag = event_queue.subscribe(
   no_ack: false,
   block: false,
   args: {"x-stream-offset": "next"}
@@ -71,6 +75,7 @@ end
 
   TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
   File.write(output_pid_path, Process.pid.to_s)
+  File.delete(startup_stage_path) if File.exists?(startup_stage_path)
   shutdown.receive
 rescue ex
   File.write(startup_error_path, "#{ex.class}: #{ex.message}")
