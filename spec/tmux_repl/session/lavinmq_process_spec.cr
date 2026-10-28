@@ -41,9 +41,18 @@ describe "LavinMQ-backed REPL processes" do
         sleep 25.milliseconds
       end
       unless found
-        raise "REPL command did not reach output pane.\n" \
-              "input pane:\n#{input_pane.capture_pane.join("\n")}\n" \
-              "output pane:\n#{output_pane.capture_pane.join("\n")}"
+        diagnostics = "input pane:\n#{input_pane.capture_pane.join("\n")}\n" \
+                      "output pane:\n#{output_pane.capture_pane.join("\n")}"
+        begin
+          channel = Global.amqp_channel
+          command_queue = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(name))
+          event_queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(name))
+          diagnostics += "\ncommand stream messages: #{command_queue.message_count}"
+          diagnostics += "\nevent stream messages: #{event_queue.message_count}"
+        rescue ex
+          diagnostics += "\nqueue diagnostics failed: #{ex.message}"
+        end
+        raise "REPL command did not reach output pane.\n#{diagnostics}"
       end
       output_pane.capture_pane.join("\n").should contain("[exit status: 0]")
     ensure
