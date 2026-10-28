@@ -5,12 +5,13 @@ Usage:
   tmux.repl stop [SESSION]    Stop a session and remove its state
   tmux.repl --help            Show this help
 
-Commands are entered in the left pane. Each completed command's output and exit
-status are appended to a per-session output log. The tmux.show executable follows
-that log in the right pane.
+The left pane edits and submits commands. A separate tmux.repl.input process
+executes them through PTY::Session. Commands and output events are transported
+through the session's durable LavinMQ streams.
 
 Environment:
-  TMUX_REPL_SESSION  Default session name (default: tmux-repl)
-  XDG_STATE_HOME     State directory base (default: ~/.local/state)
+  TMUX_REPL_SESSION          Default session name
+  XDG_STATE_HOME             State directory base
+  LAVINMQ_AMQP_UNIXSOCKET     Required LavinMQ AMQP Unix socket
 
-Requires tmux, tmux.repl, tmux.show, tail, and a POSIX /bin/sh.
+Requires tmux, tmux.repl, tmux.repl.input, tmux.show, and LavinMQ.
