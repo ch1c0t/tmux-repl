@@ -33,7 +33,7 @@ end
 consumer_tag = events.subscribe(
   no_ack: false,
   block: false,
-  args: {"x-stream-offset": "first"}
+  args: {"x-stream-offset": "next"}
 ) do |message|
   begin
     data = JSON.parse(message.body_io.to_s)
@@ -63,6 +63,7 @@ consumer_tag = events.subscribe(
   end
 end
 
+TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
 File.write(output_pid_path, Process.pid.to_s)
 
 begin
