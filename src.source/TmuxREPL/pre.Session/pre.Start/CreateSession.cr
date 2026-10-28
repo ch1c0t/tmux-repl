@@ -53,6 +53,7 @@ end
 
 private def wait_for_ready(path : String, process_name : String) : Nil
   error_path = path.sub(/\.pid$/, ".error")
+  stage_path = path.sub(/\.pid$/, ".startup")
   deadline = Time.instant + 5.seconds
 
   while Time.instant < deadline
@@ -70,7 +71,9 @@ private def wait_for_ready(path : String, process_name : String) : Nil
     raise "#{process_name} failed before readiness: #{details}"
   end
 
-  raise "Timed out waiting for #{process_name} readiness at #{path}"
+  stage = File.read(stage_path).strip if File.exists?(stage_path)
+  detail = stage ? " while #{stage}" : ""
+  raise "Timed out waiting for #{process_name} readiness at #{path}#{detail}"
 end
 
 private def configure_session(session : Tmux::Session) : Nil
