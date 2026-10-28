@@ -17,8 +17,8 @@ describe Tmux::Server do
       split = pane.split(:right, detached: true)
       split.window.window_id.should eq(window.window_id)
 
-      left = pane.display_message("\#{pane_left}").to_i
-      right = split.display_message("\#{pane_left}").to_i
+      left = pane.display_message("#{pane_left}").to_i
+      right = split.display_message("#{pane_left}").to_i
       right.should be > left
 
       pane.send_keys("printf 'TMUX_API_READY'")
@@ -36,5 +36,41 @@ describe Tmux::Server do
       rescue Tmux::Error
       end
     end
+  end
+
+  it "starts session and split-pane commands without an interactive shell prompt" do
+    socket_name = "crystal_tmux_direct_api_spec_#{Process.pid}"
+    server = Tmux::Server.new(socket_name)
+
+    begin
+      session = server.new_session(
+        "direct-api-spec",
+        detached: true,
+        command: ["/bin/sh", "-c", "printf 'TMUX_DIRECT_SESSION_READY'; sleep 5"]
+      )
+      pane = session.active_window.active_pane
+      wait_for_marker(pane, "TMUX_DIRECT_SESSION_READY").should be_true
+
+      split = pane.split(
+        :right,
+        detached: true,
+        command: ["/bin/sh", "-c", "printf 'TMUX_DIRECT_SPLIT_READY'; sleep 5"]
+      )
+      wait_for_marker(split, "TMUX_DIRECT_SPLIT_READY").should be_true
+    ensure
+      begin
+        server.kill_server
+      rescue Tmux::Error
+      end
+    end
+  end
+
+  private def wait_for_marker(pane : Tmux::Pane, marker : String) : Bool
+    deadline = Time.instant + 3.seconds
+    while Time.instant < deadline
+      return true if pane.capture_pane.join("\n").includes?(marker)
+      sleep 25.milliseconds
+    end
+    false
   end
 end
