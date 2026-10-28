@@ -20,6 +20,7 @@ describe "LavinMQ-backed REPL processes" do
 
     begin
       ENV["XDG_STATE_HOME"] = state_home
+      FileUtils.mkdir_p(state_home)
 
       # Start an isolated tmux server before adding bin/ to PATH. The daemon
       # deliberately keeps this old PATH, like an interactive local tmux server.
