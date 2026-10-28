@@ -52,10 +52,22 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
 end
 
 private def wait_for_ready(path : String, process_name : String) : Nil
+  error_path = path.sub(/\.pid$/, ".error")
   deadline = Time.instant + 5.seconds
+
   while Time.instant < deadline
+    if File.exists?(error_path)
+      details = File.read(error_path).strip
+      raise "#{process_name} failed before readiness: #{details}"
+    end
+
     return if File.exists?(path)
     sleep 10.milliseconds
+  end
+
+  if File.exists?(error_path)
+    details = File.read(error_path).strip
+    raise "#{process_name} failed before readiness: #{details}"
   end
 
   raise "Timed out waiting for #{process_name} readiness at #{path}"
