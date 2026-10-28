@@ -1,8 +1,8 @@
-require "pty"
+require "reply"
 require "../tmux_repl"
 
-unless ARGV[0]? == "--worker"
-  STDERR.puts "Usage: tmux.repl.input --worker SESSION"
+unless ARGV[0]? == "--input"
+  STDERR.puts "Usage: tmux.repl.input --input SESSION"
   exit 2
 end
 
@@ -12,42 +12,92 @@ unless session_name = ARGV[1]?
 end
 
 base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-ready_path = File.join(base, "tmux-repl", session_name, "worker.pid")
-shutdown = Channel(Nil).new(1)
-Process.on_terminate do |_reason|
-  shutdown.send(nil)
-end
+state_dir = File.join(base, "tmux-repl", session_name)
+input_pid_path = File.join(state_dir, "input.pid")
 
 channel = Global.amqp_channel
-channel.prefetch(10)
 commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
 events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-session = PTY::Session.new(:sh)
+reader = Reply::Reader.new
+sequence = 0_u64
+selected_sequence : UInt64? = nil
+history = [] of Tuple(UInt64, String)
+
+File.write(input_pid_path, Process.pid.to_s)
 
 begin
-  session.start
+  reader.read_loop do |expression|
+    next if expression.strip.empty?
+    control = expression.strip
 
-  commands.subscribe(no_ack: false, block: false, args: {"x-stream-offset": "next"}) do |message|
-    begin
-      data = JSON.parse(message.body_io.to_s)
-      if data["type"].as_s == "command"
-        sequence = data["sequence"].as_i64.to_u64
-        command = data["command"].as_s
-        TmuxREPL.publish_event(events, "started", session_name, sequence, command: command)
-        result = session.run(command)
-        TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: result.output)
-        TmuxREPL.publish_event(events, "complete", session_name, sequence, command: command, status: result.status)
+    if match = control.match(/\A:select\s+([0-9]+)\z/)
+      target = match[1].to_u64
+      if history.any? { |entry| entry[0] == target }
+        TmuxREPL.publish_event(events, "select", session_name, target)
+        selected_sequence = target
+        puts "Selected input ##{target}."
+      else
+        puts "No input ##{target}. Use :list to see submitted inputs."
       end
-      message.ack
-    rescue ex
-      STDERR.puts "tmux.repl.input: #{ex.message}"
-      message.reject(requeue: false)
+      next
     end
-  end
 
-  File.write(ready_path, Process.pid.to_s)
-  shutdown.receive
+    case control
+    when ":prev"
+      if current = selected_sequence
+        index = history.index { |entry| entry[0] == current }
+        if index && index > 0
+          target = history[index - 1][0]
+          TmuxREPL.publish_event(events, "select", session_name, target)
+          selected_sequence = target
+          puts "Selected input ##{target}."
+        else
+          puts "Already at the oldest input."
+        end
+      else
+        puts "No inputs have been submitted."
+      end
+      next
+    when ":next"
+      if current = selected_sequence
+        index = history.index { |entry| entry[0] == current }
+        if index && index < history.size - 1
+          target = history[index + 1][0]
+          TmuxREPL.publish_event(events, "select", session_name, target)
+          selected_sequence = target
+          puts "Selected input ##{target}."
+        else
+          puts "Already at the newest input."
+        end
+      else
+        puts "No inputs have been submitted."
+      end
+      next
+    when ":list"
+      if history.empty?
+        puts "No inputs have been submitted."
+      else
+        history.each do |entry|
+          marker = entry[0] == selected_sequence ? "*" : " "
+          puts "#{marker} ##{entry[0]}: #{entry[1].lines.first? || entry[1]}"
+        end
+      end
+      next
+    when ":help"
+      puts ":select ID  Show the output for a previously submitted input."
+      puts ":prev       Select the previous input."
+      puts ":next       Select the next input."
+      puts ":list       List submitted inputs."
+      next
+    end
+
+    sequence &+= 1_u64
+    history << {sequence, expression}
+    selected_sequence = sequence
+    TmuxREPL.publish_event(events, "input", session_name, sequence, command: expression)
+    TmuxREPL.publish_command(commands, session_name, sequence, expression)
+    puts "[input ##{sequence}] submitted. Use :select ID, :prev, :next, :list, or :help."
+  end
 ensure
-  session.terminate
-  File.delete(ready_path) if File.exists?(ready_path)
+  File.delete(input_pid_path) if File.exists?(input_pid_path)
 end
