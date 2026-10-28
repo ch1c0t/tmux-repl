@@ -1,11 +1,21 @@
 require "../tmux_repl"
 
+if ARGV[0]? == "--log"
+  unless path = ARGV[1]?
+    STDERR.puts "Usage: tmux.show --log LOG"
+    exit 2
+  end
+  Process.exec("tail", ["-n", "+1", "-f", path])
+end
+
 unless session_name = ARGV[0]?
   STDERR.puts "Usage: tmux.show SESSION"
   exit 2
 end
 
-events = TmuxREPL.stream_queue(Global.amqp_channel, TmuxREPL.events_queue_name(session_name))
+channel = Global.amqp_channel
+channel.prefetch(10)
+events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
 events.subscribe(no_ack: true, block: true, args: {"x-stream-offset": "first"}) do |message|
   begin
     data = JSON.parse(message.body_io.to_s)
