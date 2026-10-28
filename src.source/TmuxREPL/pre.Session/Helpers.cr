@@ -1,3 +1,10 @@
+private def amqp_environment : Hash(String, String)
+  socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]?
+  raise "Missing critical environment configuration variable: LAVINMQ_AMQP_UNIXSOCKET" unless socket_path
+
+  {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+end
+
 private def state_dir : String
   base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
   File.join(base, "tmux-repl", @name)
