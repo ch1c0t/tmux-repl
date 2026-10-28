@@ -16,7 +16,8 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       server.new_session(
         name: @name,
         detached: true,
-        command: [input_executable, "--input", @name]
+        command: [input_executable, "--input", @name],
+        environment: amqp_environment
       )
     end
     session = created
