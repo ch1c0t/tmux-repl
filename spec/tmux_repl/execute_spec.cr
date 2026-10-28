@@ -18,7 +18,7 @@ describe PTY do
       File.write(log, "")
 
       spawn do
-        result_channel.send(PTY.run("printf PTY_FIRST; sleep 1; printf PTY_SECOND") do |chunk|
+        result_channel.send(PTY.run("printf '\\nLIVE_FIRST\\n'; sleep 1; printf '\\nLIVE_%s\\n' SECOND") do |chunk|
           File.open(log, "a") { |file| file.print(chunk) }
         end)
       end
@@ -26,9 +26,10 @@ describe PTY do
       found_first = false
       deadline = Time.instant + 700.milliseconds
       while Time.instant < deadline
-        if File.read(log).includes?("PTY_FIRST")
+        content = File.read(log)
+        if content.includes?("\r\nLIVE_FIRST") || content.includes?("\nLIVE_FIRST")
           found_first = true
-          File.read(log).should_not contain("PTY_SECOND")
+          (content.includes?("\r\nLIVE_SECOND") || content.includes?("\nLIVE_SECOND")).should be_false
           break
         end
         sleep 10.milliseconds
@@ -36,7 +37,8 @@ describe PTY do
 
       found_first.should be_true
       output, status = result_channel.receive
-      output.should contain("PTY_SECOND")
+      output.should contain("LIVE_FIRST")
+      output.should contain("LIVE_SECOND")
       status.should eq(0)
     ensure
       File.delete(log) if !log.empty? && File.exists?(log)
