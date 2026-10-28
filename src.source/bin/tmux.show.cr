@@ -16,7 +16,7 @@ end
 channel = Global.amqp_channel
 channel.prefetch(10)
 events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-events.subscribe(no_ack: true, block: true, args: {"x-stream-offset": "first"}) do |message|
+events.subscribe(no_ack: false, block: true, args: {"x-stream-offset": "first"}) do |message|
   begin
     data = JSON.parse(message.body_io.to_s)
     case data["type"]?.try(&.as_s?)
@@ -32,5 +32,7 @@ events.subscribe(no_ack: true, block: true, args: {"x-stream-offset": "first"}) 
     end
   rescue ex
     STDERR.puts "tmux.show: invalid event: #{ex.message}"
+  ensure
+    message.ack
   end
 end
