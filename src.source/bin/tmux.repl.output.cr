@@ -30,14 +30,14 @@ begin
   event_queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
   events = event_queue
   inputs = {} of UInt64 => String
-outputs = {} of UInt64 => String
-statuses = {} of UInt64 => Int32
-selected_sequence : UInt64? = nil
-shutdown = Channel(Nil).new(1)
+  outputs = {} of UInt64 => String
+  statuses = {} of UInt64 => Int32
+  selected_sequence : UInt64? = nil
+  shutdown = Channel(Nil).new(1)
 
-Process.on_terminate do |_reason|
-  shutdown.send(nil)
-end
+  Process.on_terminate do |_reason|
+    shutdown.send(nil)
+  end
 
   File.write(startup_stage_path, "subscribing to event stream")
   consumer_tag = event_queue.subscribe(
