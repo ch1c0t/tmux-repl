@@ -32,8 +32,16 @@ private def configure_session(session : Tmux::Session) : Nil
   output_pane = input_pane.split(:right, detached: true)
   window.select_layout("even-horizontal")
 
+  if @command
+    log = File.join(state_dir, "output.log")
+    File.write(log, "")
+    input_pane.run!("pipe-pane", "-o", "-t", input_pane.pane_id, "cat >> #{shell_quote(log)}")
+    output_pane.send_keys("#{shell_quote(show_executable)} --log #{shell_quote(log)}", literal: true)
+  else
+    output_pane.send_keys("#{shell_quote(show_executable)} #{shell_quote(@name)}", literal: true)
+  end
+
   input_pane.send_keys(input_command, literal: true)
-  output_pane.send_keys("#{shell_quote(show_executable)} #{shell_quote(@name)}", literal: true)
   input_pane.select
 end
 
