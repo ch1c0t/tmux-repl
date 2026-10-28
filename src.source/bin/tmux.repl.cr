@@ -7,7 +7,11 @@ when "start"
 when "stop"
   TmuxREPL::Session.new(ARGV[1]? || ENV["TMUX_REPL_SESSION"]? || generate_session_name).stop
 when "--repl"
-  session_name = ARGV[2]? || ENV["TMUX_REPL_SESSION"]? || generate_session_name
+  unless session_name = ARGV[1]?
+    STDERR.puts "Missing session name."
+    exit 2
+  end
+
   commands = TmuxREPL.stream_queue(Global.amqp_channel, TmuxREPL.commands_queue_name(session_name))
   events = TmuxREPL.stream_queue(Global.amqp_channel, TmuxREPL.events_queue_name(session_name))
   reader = Reply::Reader.new
