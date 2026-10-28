@@ -1,6 +1,6 @@
-tmux.show - follow a tmux.repl output log
+tmux.show - display events from a tmux.repl session
 
 Usage:
-  tmux.show LOG
+  tmux.show SESSION
 
-Displays the log from its first line and continuously follows appended output.
+Consumes the session's durable LavinMQ event stream from its first event.
