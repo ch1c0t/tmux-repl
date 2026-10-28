@@ -1,6 +1,0 @@
-tmux.show - display events from a tmux.repl session
-
-Usage:
-  tmux.show SESSION
-
-Consumes the session's durable LavinMQ event stream from its first event.
