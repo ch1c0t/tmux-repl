@@ -23,27 +23,31 @@ channel.prefetch(10)
 commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
 events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
 session = PTY::Session.new(:sh)
-session.start
 
-commands.subscribe(no_ack: false, block: false, args: {"x-stream-offset": "next"}) do |message|
-  begin
-    data = JSON.parse(message.body_io.to_s)
-    if data["type"].as_s == "command"
-      sequence = data["sequence"].as_i64.to_u64
-      command = data["command"].as_s
-      TmuxREPL.publish_event(events, "started", session_name, sequence, command: command)
-      result = session.run(command)
-      TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: result.output)
-      TmuxREPL.publish_event(events, "complete", session_name, sequence, command: command, status: result.status)
+begin
+  session.start
+
+  commands.subscribe(no_ack: false, block: false, args: {"x-stream-offset": "next"}) do |message|
+    begin
+      data = JSON.parse(message.body_io.to_s)
+      if data["type"].as_s == "command"
+        sequence = data["sequence"].as_i64.to_u64
+        command = data["command"].as_s
+        TmuxREPL.publish_event(events, "started", session_name, sequence, command: command)
+        result = session.run(command)
+        TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: result.output)
+        TmuxREPL.publish_event(events, "complete", session_name, sequence, command: command, status: result.status)
+      end
+      message.ack
+    rescue ex
+      STDERR.puts "tmux.repl.input: #{ex.message}"
+      message.reject(requeue: false)
     end
-    message.ack
-  rescue ex
-    STDERR.puts "tmux.repl.input: #{ex.message}"
-    message.reject(requeue: false)
   end
-end
 
-File.write(ready_path, Process.pid.to_s)
-shutdown.receive
-session.terminate
-File.delete(ready_path) if File.exists?(ready_path)
+  File.write(ready_path, Process.pid.to_s)
+  shutdown.receive
+ensure
+  session.terminate
+  File.delete(ready_path) if File.exists?(ready_path)
+end
