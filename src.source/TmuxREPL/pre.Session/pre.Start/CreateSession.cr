@@ -5,6 +5,9 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
 
   begin
     FileUtils.mkdir_p(dir)
+    unless @command
+      File.write(File.join(dir, "input.startup"), "launching #{input_executable}")
+    end
 
     created = if @command
       File.write(File.join(dir, "output.log"), "")
@@ -20,6 +23,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
 
     unless @command
       wait_for_ready(File.join(dir, "input.pid"), "tmux.repl.input")
+      File.write(File.join(dir, "worker.startup"), "launching #{worker_executable}")
       worker_process = Process.new(
         worker_executable,
         ["--worker", @name],
@@ -90,6 +94,7 @@ private def configure_session(session : Tmux::Session) : Nil
     )
     input_pane.send_keys(input_command, literal: true)
   else
+    File.write(File.join(state_dir, "output.startup"), "launching #{output_executable}")
     input_pane.split(
       :right,
       detached: true,
