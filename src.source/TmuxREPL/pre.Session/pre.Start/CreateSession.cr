@@ -1,6 +1,7 @@
 private def create_session(server : Tmux::Server, focus : Bool) : Nil
   dir = state_dir
   session : Tmux::Session? = nil
+  worker_process : Process? = nil
 
   begin
     FileUtils.mkdir_p(dir)
@@ -18,22 +19,42 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
     session = created
 
     unless @command
-      Process.new(
+      ready_path = File.join(dir, "worker.pid")
+      File.delete(ready_path) if File.exists?(ready_path)
+      worker_process = Process.new(
         worker_executable,
         ["--worker", @name],
         input: Process::Redirect::Close,
         output: Process::Redirect::Close,
         error: Process::Redirect::Close
       )
+      wait_for_worker(ready_path)
     end
 
     configure_session(created)
     activate(created) if focus
   rescue ex
+    if process = worker_process
+      begin
+        Process.signal(Signal::TERM, process.pid)
+        process.wait
+      rescue
+      end
+    end
     cleanup_failed_start(server, session, dir)
     STDERR.puts "tmux.repl: #{ex.message}"
     raise ex
   end
+end
+
+private def wait_for_worker(ready_path : String) : Nil
+  deadline = Time.instant + 5.seconds
+  while Time.instant < deadline
+    return if File.exists?(ready_path)
+    sleep 10.milliseconds
+  end
+
+  raise "Timed out waiting for tmux.repl.input to become ready"
 end
 
 private def configure_session(session : Tmux::Session) : Nil
