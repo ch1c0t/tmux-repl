@@ -15,7 +15,9 @@ base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state
 state_dir = File.join(base, "tmux-repl", session_name)
 ready_path = File.join(state_dir, "worker.pid")
 startup_error_path = File.join(state_dir, "worker.error")
+startup_stage_path = File.join(state_dir, "worker.startup")
 File.delete(startup_error_path) if File.exists?(startup_error_path)
+File.write(startup_stage_path, "connecting to LavinMQ")
 shutdown = Channel(Nil).new(1)
 
 Process.on_terminate do |_reason|
@@ -27,10 +29,14 @@ session : PTY::Session? = nil
 begin
   channel = Global.amqp_channel
   channel.prefetch(10)
+  File.write(startup_stage_path, "declaring command stream")
   commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
+  File.write(startup_stage_path, "declaring event stream")
   events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-  session = PTY::Session.new(:sh)
-  session.start
+  File.write(startup_stage_path, "starting PTY session")
+  running_session = PTY::Session.new(:sh)
+  session = running_session
+  running_session.start
 
   consumer_tag = commands.subscribe(
     no_ack: false,
@@ -43,7 +49,7 @@ begin
         sequence = data["sequence"].as_i64.to_u64
         command = data["command"].as_s
         TmuxREPL.publish_event(events, "started", session_name, sequence, command: command)
-        result = session.run(command) do |chunk|
+        result = running_session.run(command) do |chunk|
           TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: chunk)
         end
         TmuxREPL.publish_event(events, "complete", session_name, sequence, command: command, status: result.status)
@@ -59,6 +65,7 @@ begin
   end
 
   File.write(ready_path, Process.pid.to_s)
+  File.delete(startup_stage_path) if File.exists?(startup_stage_path)
   shutdown.receive
 rescue ex
   File.write(startup_error_path, "#{ex.class}: #{ex.message}")
