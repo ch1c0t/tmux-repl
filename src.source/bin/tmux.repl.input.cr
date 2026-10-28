@@ -1,6 +1,19 @@
 require "reply"
 require "../tmux_repl"
 
+class TmuxREPLInputReader < Reply::Reader
+  @ready_path : String
+
+  def initialize(@ready_path : String)
+    super()
+  end
+
+  def prompt(io : IO, line_number : Int32, color : Bool)
+    super(io, line_number, color)
+    File.write(@ready_path, Process.pid.to_s) unless File.exists?(@ready_path)
+  end
+end
+
 unless ARGV[0]? == "--input"
   STDERR.puts "Usage: tmux.repl.input --input SESSION"
   exit 2
@@ -18,12 +31,10 @@ input_pid_path = File.join(state_dir, "input.pid")
 channel = Global.amqp_channel
 commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
 events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-reader = Reply::Reader.new
+reader = TmuxREPLInputReader.new(input_pid_path)
 sequence = 0_u64
 selected_sequence : UInt64? = nil
 history = [] of Tuple(UInt64, String)
-
-File.write(input_pid_path, Process.pid.to_s)
 
 begin
   reader.read_loop do |expression|
