@@ -13,14 +13,13 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       server.new_session(
         name: @name,
         detached: true,
-        command: [repl_executable, "--repl", @name]
+        command: [input_executable, "--input", @name]
       )
     end
     session = created
 
     unless @command
-      ready_path = File.join(dir, "worker.pid")
-      File.delete(ready_path) if File.exists?(ready_path)
+      wait_for_ready(File.join(dir, "input.pid"), "tmux.repl.input")
       worker_process = Process.new(
         worker_executable,
         ["--worker", @name],
@@ -28,10 +27,15 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
         output: Process::Redirect::Close,
         error: Process::Redirect::Close
       )
-      wait_for_worker(ready_path)
+      wait_for_ready(File.join(dir, "worker.pid"), "tmux.repl.worker")
     end
 
     configure_session(created)
+
+    unless @command
+      wait_for_ready(File.join(dir, "output.pid"), "tmux.repl.output")
+    end
+
     activate(created) if focus
   rescue ex
     if process = worker_process
@@ -47,14 +51,14 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
   end
 end
 
-private def wait_for_worker(ready_path : String) : Nil
+private def wait_for_ready(path : String, process_name : String) : Nil
   deadline = Time.instant + 5.seconds
   while Time.instant < deadline
-    return if File.exists?(ready_path)
+    return if File.exists?(path)
     sleep 10.milliseconds
   end
 
-  raise "Timed out waiting for tmux.repl.input to become ready"
+  raise "Timed out waiting for #{process_name} readiness at #{path}"
 end
 
 private def configure_session(session : Tmux::Session) : Nil
@@ -67,14 +71,14 @@ private def configure_session(session : Tmux::Session) : Nil
     input_pane.split(
       :right,
       detached: true,
-      command: [show_executable, "--log", log]
+      command: [output_executable, "--log", log]
     )
     input_pane.send_keys(input_command, literal: true)
   else
     input_pane.split(
       :right,
       detached: true,
-      command: [show_executable, @name]
+      command: [output_executable, @name]
     )
   end
 
