@@ -8,8 +8,10 @@ targets:
     main: src/bin/tmux.repl.cr
   tmux.repl.input:
     main: src/bin/tmux.repl.input.cr
-  tmux.show:
-    main: src/bin/tmux.show.cr
+  tmux.repl.output:
+    main: src/bin/tmux.repl.output.cr
+  tmux.repl.worker:
+    main: src/bin/tmux.repl.worker.cr
 dependencies:
   pty:
     github: ch1c0t/crystal.pty
