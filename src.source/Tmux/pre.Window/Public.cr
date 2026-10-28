@@ -11,11 +11,11 @@ def session : Session
 end
 
 def window_name : String
-  formatted_value("#{window_name}")
+  formatted_value("\\#{window_name}")
 end
 
 def window_index : Int32
-  formatted_value("#{window_index}").to_i
+  formatted_value("\\#{window_index}").to_i
 end
 
 def active? : Bool
@@ -23,13 +23,13 @@ def active? : Bool
 end
 
 def panes : Array(Pane)
-  format = "#{pane_id}"
+  format = "\\#{pane_id}"
   result = @server.run!("list-panes", "-t", @window_id, "-F", format)
   result.stdout_lines.reject(&.empty?).map { |id| Pane.new(@server, @session_id, @window_id, id) }
 end
 
 def active_pane : Pane
-  id = @server.run!("display-message", "-p", "-t", @window_id, "#{pane_id}").stdout.strip
+  id = @server.run!("display-message", "-p", "-t", @window_id, "\\#{pane_id}").stdout.strip
   panes.each { |item| return item if item.pane_id == id }
   raise Error.new("Window #{@window_id} has no active pane")
 end
