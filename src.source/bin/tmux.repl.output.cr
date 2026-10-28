@@ -16,11 +16,17 @@ end
 base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
 state_dir = File.join(base, "tmux-repl", session_name)
 output_pid_path = File.join(state_dir, "output.pid")
+startup_error_path = File.join(state_dir, "output.error")
+File.delete(startup_error_path) if File.exists?(startup_error_path)
+events : AMQP::Client::Queue? = nil
+consumer_tag : String? = nil
 
-channel = Global.amqp_channel
-channel.prefetch(32)
-events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-inputs = {} of UInt64 => String
+begin
+  channel = Global.amqp_channel
+  channel.prefetch(32)
+  event_queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
+  events = event_queue
+  inputs = {} of UInt64 => String
 outputs = {} of UInt64 => String
 statuses = {} of UInt64 => Int32
 selected_sequence : UInt64? = nil
@@ -30,7 +36,7 @@ Process.on_terminate do |_reason|
   shutdown.send(nil)
 end
 
-consumer_tag = events.subscribe(
+consumer_tag = event_queue.subscribe(
   no_ack: false,
   block: false,
   args: {"x-stream-offset": "next"}
@@ -63,12 +69,21 @@ consumer_tag = events.subscribe(
   end
 end
 
-TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
-File.write(output_pid_path, Process.pid.to_s)
-
-begin
+  TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
+  File.write(output_pid_path, Process.pid.to_s)
   shutdown.receive
+rescue ex
+  File.write(startup_error_path, "#{ex.class}: #{ex.message}")
+  STDERR.puts "tmux.repl.output: #{ex.class}: #{ex.message}"
+  exit 1
 ensure
-  events.unsubscribe(consumer_tag)
+  if event_queue = events
+    if tag = consumer_tag
+      begin
+        event_queue.unsubscribe(tag)
+      rescue
+      end
+    end
+  end
   File.delete(output_pid_path) if File.exists?(output_pid_path)
 end
