@@ -11,6 +11,13 @@ unless session_name = ARGV[1]?
   exit 2
 end
 
+base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
+ready_path = File.join(base, "tmux-repl", session_name, "worker.pid")
+shutdown = Channel(Nil).new(1)
+Process.on_terminate do |_reason|
+  shutdown.send(nil)
+end
+
 channel = Global.amqp_channel
 channel.prefetch(10)
 commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
@@ -18,7 +25,7 @@ events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name)
 session = PTY::Session.new(:sh)
 session.start
 
-commands.subscribe(no_ack: false, block: true, args: {"x-stream-offset": "next"}) do |message|
+commands.subscribe(no_ack: false, block: false, args: {"x-stream-offset": "next"}) do |message|
   begin
     data = JSON.parse(message.body_io.to_s)
     if data["type"].as_s == "command"
@@ -35,3 +42,8 @@ commands.subscribe(no_ack: false, block: true, args: {"x-stream-offset": "next"}
     message.reject(requeue: false)
   end
 end
+
+File.write(ready_path, Process.pid.to_s)
+shutdown.receive
+session.terminate
+File.delete(ready_path) if File.exists?(ready_path)
