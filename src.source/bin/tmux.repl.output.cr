@@ -41,37 +41,37 @@ begin
 
   File.write(startup_stage_path, "subscribing to event stream")
   consumer_tag = event_queue.subscribe(
-  no_ack: false,
-  block: false,
-  args: {"x-stream-offset": "next"}
-) do |message|
-  begin
-    data = JSON.parse(message.body_io.to_s)
-    sequence = data["sequence"].as_i64.to_u64
-
-    case data["type"].as_s
-    when "input"
-      inputs[sequence] = data["command"].as_s
-      selected_sequence = sequence
-    when "select"
-      selected_sequence = sequence if inputs.has_key?(sequence)
-    when "output"
-      chunk = data["chunk"].as_s
-      outputs[sequence] = outputs.fetch(sequence, "") + chunk
-    when "complete"
-      statuses[sequence] = data["status"].as_i64.to_i32
-    end
-
-    TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
-    message.ack
-  rescue ex
-    STDERR.puts "tmux.repl.output: invalid event: #{ex.message}"
+    no_ack: false,
+    block: false,
+    args: {"x-stream-offset": "next"}
+  ) do |message|
     begin
-      message.reject(requeue: false)
-    rescue
+      data = JSON.parse(message.body_io.to_s)
+      sequence = data["sequence"].as_i64.to_u64
+
+      case data["type"].as_s
+      when "input"
+        inputs[sequence] = data["command"].as_s
+        selected_sequence = sequence
+      when "select"
+        selected_sequence = sequence if inputs.has_key?(sequence)
+      when "output"
+        chunk = data["chunk"].as_s
+        outputs[sequence] = outputs.fetch(sequence, "") + chunk
+      when "complete"
+        statuses[sequence] = data["status"].as_i64.to_i32
+      end
+
+      TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
+      message.ack
+    rescue ex
+      STDERR.puts "tmux.repl.output: invalid event: #{ex.message}"
+      begin
+        message.reject(requeue: false)
+      rescue
+      end
     end
   end
-end
 
   TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
   File.write(output_pid_path, Process.pid.to_s)
