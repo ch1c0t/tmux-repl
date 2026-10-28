@@ -1,25 +1,25 @@
-require "./session/helper"
+require "pty"
 
-describe TmuxREPL do
+describe PTY do
   it "captures combined terminal output and the process exit code" do
-    result = TmuxREPL.execute("printf stdout-token; printf stderr-token >&2; exit 17")
+    output, status = PTY.run("printf stdout-token; printf stderr-token >&2; exit 17")
 
-    result.output.should contain("stdout-token")
-    result.output.should contain("stderr-token")
-    result.status.should eq(17)
+    output.should contain("stdout-token")
+    output.should contain("stderr-token")
+    status.should eq(17)
   end
 
   it "streams terminal output before the command completes" do
     log = ""
-    result_channel = Channel(TmuxREPL::Result).new
+    result_channel = Channel(Tuple(String, Int32)).new
 
     begin
       log = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-repl-pty-#{Process.pid}.log")
       File.write(log, "")
 
       spawn do
-        result_channel.send(TmuxREPL.execute("printf PTY_FIRST; sleep 1; printf PTY_SECOND") do |chunk|
-          TmuxREPL.append_output(log, chunk)
+        result_channel.send(PTY.run("printf PTY_FIRST; sleep 1; printf PTY_SECOND") do |chunk|
+          File.open(log, "a") { |file| file.print(chunk) }
         end)
       end
 
@@ -35,9 +35,9 @@ describe TmuxREPL do
       end
 
       found_first.should be_true
-      result = result_channel.receive
-      result.output.should contain("PTY_SECOND")
-      result.status.should eq(0)
+      output, status = result_channel.receive
+      output.should contain("PTY_SECOND")
+      status.should eq(0)
     ensure
       File.delete(log) if !log.empty? && File.exists?(log)
     end
