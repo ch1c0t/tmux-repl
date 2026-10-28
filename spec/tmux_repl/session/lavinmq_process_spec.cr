@@ -9,12 +9,29 @@ describe "LavinMQ-backed REPL processes" do
     output_pid_path = File.join(state_home, "tmux-repl", name, "output.pid")
     previous_state_home = ENV["XDG_STATE_HOME"]?
     previous_path = ENV["PATH"]?
-    ENV["XDG_STATE_HOME"] = state_home
-    ENV["PATH"] = "#{File.expand_path("bin")}:#{previous_path || ""}"
+    previous_tmux = ENV["TMUX"]?
+    bin_dir = File.expand_path("bin")
+    tmux_socket_path = File.join(state_home, "tmux.sock")
+    bootstrap_name = "repl_path_bootstrap_#{Process.pid}"
+    server = Tmux::Server.new(socket_path: tmux_socket_path)
     repl = TmuxREPL::Session.new(name)
     started = false
+    bootstrap_started = false
 
     begin
+      ENV["XDG_STATE_HOME"] = state_home
+      FileUtils.mkdir_p(state_home)
+
+      # Start an isolated tmux server before adding bin/ to PATH. The daemon
+      # deliberately keeps this old PATH, like an interactive local tmux server.
+      ENV["PATH"] = "/usr/bin:/bin"
+      ENV.delete("TMUX")
+      server.new_session(name: bootstrap_name, detached: true)
+      bootstrap_started = true
+
+      ENV["TMUX"] = "#{tmux_socket_path},#{Process.pid},0,0,0"
+      ENV["PATH"] = "#{bin_dir}:#{previous_path || ""}"
+
       repl.start(focus: false)
       started = true
 
@@ -26,7 +43,6 @@ describe "LavinMQ-backed REPL processes" do
         end
       end
 
-      server = Tmux::Server.new
       socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]?
       socket_path.should_not be_nil
       session_environment = server.cmd("show-environment", "-t", name, "LAVINMQ_AMQP_UNIXSOCKET")
@@ -110,8 +126,15 @@ describe "LavinMQ-backed REPL processes" do
       visible.should_not contain("SECOND_REPL_OUTPUT")
     ensure
       repl.stop if started
+      if bootstrap_started
+        begin
+          server.kill_server
+        rescue Tmux::Error
+        end
+      end
       ENV["XDG_STATE_HOME"] = previous_state_home
       ENV["PATH"] = previous_path
+      ENV["TMUX"] = previous_tmux
       FileUtils.rm_rf(state_home)
     end
   end

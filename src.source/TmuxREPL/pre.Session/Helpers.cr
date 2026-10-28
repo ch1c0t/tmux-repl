@@ -27,9 +27,22 @@ private def worker_executable : String
 end
 
 private def sibling_executable(name : String) : String
-  path = File.expand_path(PROGRAM_NAME)
-  sibling = File.join(File.dirname(path), name)
-  File::Info.executable?(sibling) ? sibling : name
+  program_path = File.expand_path(PROGRAM_NAME)
+  sibling = File.join(File.dirname(program_path), name)
+  return sibling if File::Info.executable?(sibling)
+
+  local_bin = File.expand_path(File.join("bin", name))
+  return local_bin if File::Info.executable?(local_bin)
+
+  if search_path = ENV["PATH"]?
+    search_path.split(':').each do |directory|
+      directory = "." if directory.empty?
+      candidate = File.expand_path(name, directory)
+      return candidate if File::Info.executable?(candidate)
+    end
+  end
+
+  raise "Cannot find executable #{name.inspect} beside #{program_path.inspect} or on PATH"
 end
 
 private def shell_quote(value : String) : String
