@@ -38,7 +38,7 @@ describe "LavinMQ-backed REPL processes" do
       first_found = false
       deadline = Time.instant + 5.seconds
       while Time.instant < deadline
-        if output_pane.capture_pane.join("\\n").includes?("FIRST_REPL_OUTPUT")
+        if output_pane.capture_pane.join("\n").includes?("FIRST_REPL_OUTPUT")
           first_found = true
           break
         end
@@ -51,7 +51,7 @@ describe "LavinMQ-backed REPL processes" do
       second_found = false
       deadline = Time.instant + 5.seconds
       while Time.instant < deadline
-        if output_pane.capture_pane.join("\\n").includes?("SECOND_REPL_OUTPUT")
+        if output_pane.capture_pane.join("\n").includes?("SECOND_REPL_OUTPUT")
           second_found = true
           break
         end
@@ -64,7 +64,7 @@ describe "LavinMQ-backed REPL processes" do
       first_selected = false
       deadline = Time.instant + 5.seconds
       while Time.instant < deadline
-        visible = output_pane.capture_pane.join("\\n")
+        visible = output_pane.capture_pane.join("\n")
         if visible.includes?("INPUT #1") && visible.includes?("FIRST_REPL_OUTPUT")
           first_selected = true
           break
@@ -73,7 +73,7 @@ describe "LavinMQ-backed REPL processes" do
       end
       first_selected.should be_true
 
-      visible = output_pane.capture_pane.join("\\n")
+      visible = output_pane.capture_pane.join("\n")
       visible.should_not contain("SECOND_REPL_OUTPUT")
     ensure
       repl.stop if started
