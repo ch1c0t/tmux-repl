@@ -4,7 +4,17 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
 
   begin
     FileUtils.mkdir_p(dir)
-    created = server.new_session(name: @name, detached: true)
+
+    created = if @command
+      File.write(File.join(dir, "output.log"), "")
+      server.new_session(name: @name, detached: true)
+    else
+      server.new_session(
+        name: @name,
+        detached: true,
+        command: [repl_executable, "--repl", @name]
+      )
+    end
     session = created
 
     unless @command
@@ -29,28 +39,30 @@ end
 private def configure_session(session : Tmux::Session) : Nil
   window = session.active_window
   input_pane = window.active_pane
-  output_pane = input_pane.split(:right, detached: true)
-  window.select_layout("even-horizontal")
 
   if @command
     log = File.join(state_dir, "output.log")
-    File.write(log, "")
     input_pane.run!("pipe-pane", "-o", "-t", input_pane.pane_id, "cat >> #{shell_quote(log)}")
-    output_pane.send_keys("#{shell_quote(show_executable)} --log #{shell_quote(log)}", literal: true)
+    input_pane.split(
+      :right,
+      detached: true,
+      command: [show_executable, "--log", log]
+    )
+    input_pane.send_keys(input_command, literal: true)
   else
-    output_pane.send_keys("#{shell_quote(show_executable)} #{shell_quote(@name)}", literal: true)
+    input_pane.split(
+      :right,
+      detached: true,
+      command: [show_executable, @name]
+    )
   end
 
-  input_pane.send_keys(input_command, literal: true)
+  window.select_layout("even-horizontal")
   input_pane.select
 end
 
 private def input_command : String
-  if command = @command
-    command.map { |argument| shell_quote(argument) }.join(" ")
-  else
-    "#{shell_quote(repl_executable)} --repl #{shell_quote(@name)}"
-  end
+  @command.not_nil!.map { |argument| shell_quote(argument) }.join(" ")
 end
 
 private def cleanup_failed_start(server : Tmux::Server, session : Tmux::Session?, dir : String) : Nil
