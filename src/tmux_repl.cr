@@ -13,7 +13,7 @@ module TmuxREPL
   end
   
   def self.execute(command : String, &stream_callback : String -> Nil) : Result
-    output, status = PTY.run(["/bin/sh", "-c", command], &stream_callback)
+    output, status = PTY.run(command, &stream_callback)
     Result.new(command, output, status)
   end
   
