@@ -17,8 +17,8 @@ describe Tmux::Server do
       split = pane.split(:right, detached: true)
       split.window.window_id.should eq(window.window_id)
 
-      left = pane.display_message("#{pane_left}").to_i
-      right = split.display_message("#{pane_left}").to_i
+      left = pane.display_message("\\#{pane_left}").to_i
+      right = split.display_message("\\#{pane_left}").to_i
       right.should be > left
 
       pane.send_keys("printf 'TMUX_API_READY'")
@@ -38,7 +38,7 @@ describe Tmux::Server do
     end
   end
 
-  it "starts session and split-pane commands without an interactive shell prompt" do
+  it "starts session and split-pane commands with explicit command arguments" do
     socket_name = "crystal_tmux_direct_api_spec_#{Process.pid}"
     server = Tmux::Server.new(socket_name)
 
