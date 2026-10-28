@@ -47,6 +47,18 @@ describe "LavinMQ-backed REPL processes" do
       end
       first_completed.should be_true
 
+      input_ready = false
+      deadline = Time.instant + 5.seconds
+      while Time.instant < deadline
+        visible = input_pane.capture_pane.join("\n")
+        if visible.includes?("[input #1] submitted") && visible.includes?("$:002>")
+          input_ready = true
+          break
+        end
+        sleep 25.milliseconds
+      end
+      input_ready.should be_true
+
       input_pane.send_keys("printf 'SECOND_REPL_OUTPUT\\n'", literal: true)
 
       second_completed = false
