@@ -49,28 +49,37 @@ describe Tmux::Server do
         command: ["/bin/sh", "-c", "printf 'TMUX_DIRECT_SESSION_READY'; sleep 5"]
       )
       pane = session.active_window.active_pane
-      wait_for_marker(pane, "TMUX_DIRECT_SESSION_READY").should be_true
+      found_session = false
+      deadline = Time.instant + 3.seconds
+      while Time.instant < deadline
+        if pane.capture_pane.join("\n").includes?("TMUX_DIRECT_SESSION_READY")
+          found_session = true
+          break
+        end
+        sleep 25.milliseconds
+      end
+      found_session.should be_true
 
       split = pane.split(
         :right,
         detached: true,
         command: ["/bin/sh", "-c", "printf 'TMUX_DIRECT_SPLIT_READY'; sleep 5"]
       )
-      wait_for_marker(split, "TMUX_DIRECT_SPLIT_READY").should be_true
+      found_split = false
+      deadline = Time.instant + 3.seconds
+      while Time.instant < deadline
+        if split.capture_pane.join("\n").includes?("TMUX_DIRECT_SPLIT_READY")
+          found_split = true
+          break
+        end
+        sleep 25.milliseconds
+      end
+      found_split.should be_true
     ensure
       begin
         server.kill_server
       rescue Tmux::Error
       end
     end
-  end
-
-  private def wait_for_marker(pane : Tmux::Pane, marker : String) : Bool
-    deadline = Time.instant + 3.seconds
-    while Time.instant < deadline
-      return true if pane.capture_pane.join("\n").includes?(marker)
-      sleep 25.milliseconds
-    end
-    false
   end
 end
