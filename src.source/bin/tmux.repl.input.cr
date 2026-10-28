@@ -28,13 +28,19 @@ base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state
 state_dir = File.join(base, "tmux-repl", session_name)
 input_pid_path = File.join(state_dir, "input.pid")
 startup_error_path = File.join(state_dir, "input.error")
+startup_stage_path = File.join(state_dir, "input.startup")
 File.delete(startup_error_path) if File.exists?(startup_error_path)
+File.write(startup_stage_path, "connecting to LavinMQ")
 
 begin
   channel = Global.amqp_channel
-commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
-events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-reader = TmuxREPLInputReader.new(input_pid_path)
+  File.write(startup_stage_path, "declaring command stream")
+  commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
+  File.write(startup_stage_path, "declaring event stream")
+  events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
+  File.write(startup_stage_path, "initializing Reply reader")
+  reader = TmuxREPLInputReader.new(input_pid_path)
+  File.delete(startup_stage_path) if File.exists?(startup_stage_path)
 sequence = 0_u64
 selected_sequence : UInt64? = nil
 history = [] of Tuple(UInt64, String)
