@@ -6,6 +6,8 @@ authors:
 targets:
   tmux.repl:
     main: src/bin/tmux.repl.cr
+  tmux.repl.input:
+    main: src/bin/tmux.repl.input.cr
   tmux.show:
     main: src/bin/tmux.show.cr
 dependencies:
