@@ -34,8 +34,8 @@ begin
   File.write(startup_stage_path, "declaring event stream")
   events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
   File.write(startup_stage_path, "starting PTY session")
-  running_session = PTY::Session.new(:sh)
-  session = running_session
+  session = PTY::Session.new(:sh)
+  running_session = session.not_nil!
   running_session.start
 
   consumer_tag = commands.subscribe(
