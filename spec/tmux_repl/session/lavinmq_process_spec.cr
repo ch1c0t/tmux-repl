@@ -40,7 +40,11 @@ describe "LavinMQ-backed REPL processes" do
         end
         sleep 25.milliseconds
       end
-      found.should be_true
+      unless found
+        raise "REPL command did not reach output pane.\n" \
+              "input pane:\n#{input_pane.capture_pane.join("\n")}\n" \
+              "output pane:\n#{output_pane.capture_pane.join("\n")}"
+      end
       output_pane.capture_pane.join("\n").should contain("[exit status: 0]")
     ensure
       repl.stop if started
