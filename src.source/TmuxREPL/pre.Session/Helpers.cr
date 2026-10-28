@@ -31,6 +31,9 @@ private def sibling_executable(name : String) : String
   sibling = File.join(File.dirname(program_path), name)
   return sibling if File::Info.executable?(sibling)
 
+  local_bin = File.expand_path(File.join("bin", name))
+  return local_bin if File::Info.executable?(local_bin)
+
   if search_path = ENV["PATH"]?
     search_path.split(':').each do |directory|
       directory = "." if directory.empty?
