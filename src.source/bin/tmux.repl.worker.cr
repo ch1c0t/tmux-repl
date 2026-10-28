@@ -14,19 +14,22 @@ end
 base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
 state_dir = File.join(base, "tmux-repl", session_name)
 ready_path = File.join(state_dir, "worker.pid")
+startup_error_path = File.join(state_dir, "worker.error")
+File.delete(startup_error_path) if File.exists?(startup_error_path)
 shutdown = Channel(Nil).new(1)
 
 Process.on_terminate do |_reason|
   shutdown.send(nil)
 end
 
-channel = Global.amqp_channel
-channel.prefetch(10)
-commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
-events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-session = PTY::Session.new(:sh)
+session : PTY::Session? = nil
 
 begin
+  channel = Global.amqp_channel
+  channel.prefetch(10)
+  commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
+  events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
+  session = PTY::Session.new(:sh)
   session.start
 
   consumer_tag = commands.subscribe(
@@ -57,7 +60,16 @@ begin
 
   File.write(ready_path, Process.pid.to_s)
   shutdown.receive
+rescue ex
+  File.write(startup_error_path, "#{ex.class}: #{ex.message}")
+  STDERR.puts "tmux.repl.worker: #{ex.class}: #{ex.message}"
+  exit 1
 ensure
-  session.terminate
+  if running_session = session
+    begin
+      running_session.terminate
+    rescue
+    end
+  end
   File.delete(ready_path) if File.exists?(ready_path)
 end
