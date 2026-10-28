@@ -5,7 +5,7 @@ def split(
   detached : Bool = true,
   command : Array(String)? = nil
 ) : Pane
-  args = ["split-window", "-P", "-F", "\\#{pane_id}", "-t", @pane_id]
+  args = ["split-window", "-P", "-F", "\#{pane_id}", "-t", @pane_id]
   case direction
   when :right
     args << "-h"
