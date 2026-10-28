@@ -25,6 +25,7 @@ describe "LavinMQ-backed REPL processes" do
       # Start an isolated tmux server before adding bin/ to PATH. The daemon
       # deliberately keeps this old PATH, like an interactive local tmux server.
       ENV["PATH"] = "/usr/bin:/bin"
+      ENV.delete("TMUX")
       server.new_session(name: bootstrap_name, detached: true)
       bootstrap_started = true
 
