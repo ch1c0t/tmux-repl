@@ -35,29 +35,45 @@ describe "LavinMQ-backed REPL processes" do
 
       input_pane.send_keys("printf 'FIRST_REPL_OUTPUT\\n'", literal: true)
 
-      first_found = false
+      first_completed = false
       deadline = Time.instant + 5.seconds
       while Time.instant < deadline
-        if output_pane.capture_pane.join("\n").includes?("FIRST_REPL_OUTPUT")
-          first_found = true
+        visible = output_pane.capture_pane.join("\n")
+        if visible.includes?("FIRST_REPL_OUTPUT") && visible.includes?("[exit status: 0]")
+          first_completed = true
           break
         end
         sleep 25.milliseconds
       end
-      first_found.should be_true
+      first_completed.should be_true
 
       input_pane.send_keys("printf 'SECOND_REPL_OUTPUT\\n'", literal: true)
 
-      second_found = false
+      second_completed = false
       deadline = Time.instant + 5.seconds
       while Time.instant < deadline
-        if output_pane.capture_pane.join("\n").includes?("SECOND_REPL_OUTPUT")
-          second_found = true
+        visible = output_pane.capture_pane.join("\n")
+        if visible.includes?("SECOND_REPL_OUTPUT") && visible.includes?("[exit status: 0]")
+          second_completed = true
           break
         end
         sleep 25.milliseconds
       end
-      second_found.should be_true
+      unless second_completed
+        visible_input = input_pane.capture_pane.join("\n")
+        visible_output = output_pane.capture_pane.join("\n")
+        diagnostics = "input pane:\n#{visible_input}\noutput pane:\n#{visible_output}"
+        begin
+          channel = Global.amqp_channel
+          command_queue = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(name))
+          event_queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(name))
+          diagnostics += "\ncommand stream messages: #{command_queue.message_count}"
+          diagnostics += "\nevent stream messages: #{event_queue.message_count}"
+        rescue ex
+          diagnostics += "\nqueue diagnostics failed: #{ex.message}"
+        end
+        raise "Second command did not complete.\n#{diagnostics}"
+      end
 
       input_pane.send_keys(":select 1", literal: true)
 
@@ -65,7 +81,7 @@ describe "LavinMQ-backed REPL processes" do
       deadline = Time.instant + 5.seconds
       while Time.instant < deadline
         visible = output_pane.capture_pane.join("\n")
-        if visible.includes?("INPUT #1") && visible.includes?("FIRST_REPL_OUTPUT")
+        if visible.includes?("INPUT #1") && visible.includes?("FIRST_REPL_OUTPUT") && visible.includes?("[exit status: 0]")
           first_selected = true
           break
         end
