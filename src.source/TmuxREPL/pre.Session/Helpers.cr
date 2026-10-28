@@ -9,6 +9,12 @@ private def repl_executable : String
   "tmux.repl"
 end
 
+private def worker_executable : String
+  path = File.expand_path(PROGRAM_NAME)
+  sibling = File.join(File.dirname(path), "tmux.repl.input")
+  File::Info.executable?(sibling) ? sibling : "tmux.repl.input"
+end
+
 private def show_executable : String
   path = File.expand_path(PROGRAM_NAME)
   sibling = File.join(File.dirname(path), "tmux.show")
