@@ -124,7 +124,6 @@ describe "LavinMQ-backed REPL processes" do
 
       visible = output_pane.capture_pane.join("\n")
       visible.should_not contain("SECOND_REPL_OUTPUT")
-      worker_pid = File.read(worker_pid_path).strip.to_i64
       tmux_session.kill
       started = false
 
