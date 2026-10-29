@@ -124,6 +124,17 @@ describe "LavinMQ-backed REPL processes" do
 
       visible = output_pane.capture_pane.join("\n")
       visible.should_not contain("SECOND_REPL_OUTPUT")
+      worker_pid = File.read(worker_pid_path).strip.to_i64
+      tmux_session.kill
+      started = false
+
+      cleanup_deadline = Time.instant + 3.seconds
+      while File.exists?(worker_pid_path) && Time.instant < cleanup_deadline
+        sleep 10.milliseconds
+      end
+
+      File.exists?(worker_pid_path).should be_false
+      File.directory?(File.join(state_home, "tmux-repl", name)).should be_false
     ensure
       repl.stop if started
       if bootstrap_started
