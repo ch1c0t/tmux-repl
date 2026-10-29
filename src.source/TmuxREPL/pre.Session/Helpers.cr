@@ -2,7 +2,12 @@ private def amqp_environment : Hash(String, String)
   socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]?
   raise "Missing critical environment configuration variable: LAVINMQ_AMQP_UNIXSOCKET" unless socket_path
 
-  {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+  environment = {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+  if TmuxREPL.trace_timing_enabled?
+    environment["TMUX_REPL_TRACE_TIMING"] = "1"
+    environment["TMUX_REPL_TRACE_FILE"] = File.join(state_dir, "timing.log")
+  end
+  environment
 end
 
 private def state_dir : String
