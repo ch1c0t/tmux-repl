@@ -1,25 +1,17 @@
-def stop(state_directory : String? = nil) : Nil
-  dir = state_directory || state_dir
-  stop_worker(dir)
+def stop : Nil
+  stop_worker
 
   begin
     server = ENV["TMUX"]?.nil? ? Tmux::Server.new : Tmux::Server.from_env
-    server.cmd("kill-session", "-t", "=#{@name}")
+    server.cmd("kill-session", "-t", @name)
   rescue Tmux::Error
   ensure
-    FileUtils.rm_rf(dir)
+    FileUtils.rm_rf(state_dir)
   end
 end
 
-# Called by the session-closed hook. It deliberately does not issue
-# kill-session again, so direct tmux kills cannot recursively trigger stop.
-def cleanup_after_session_close(state_directory : String) : Nil
-  stop_worker(state_directory)
-  FileUtils.rm_rf(state_directory)
-end
-
-private def stop_worker(dir : String = state_dir) : Nil
-  ready_path = File.join(dir, "worker.pid")
+private def stop_worker : Nil
+  ready_path = File.join(state_dir, "worker.pid")
   return unless File.exists?(ready_path)
 
   pid = File.read(ready_path).strip.to_i64?
