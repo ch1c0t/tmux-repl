@@ -21,6 +21,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       )
     end
     session = created
+    configure_lifecycle(created)
 
     unless @command
       wait_for_ready(File.join(dir, "input.pid"), "tmux.repl.input")
@@ -56,9 +57,21 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
   end
 end
 
+private def configure_lifecycle(session : Tmux::Session) : Nil
+  target = session.session_id
+  session.run!("set-option", "-t", target, "@tmux-repl-managed", "1")
+  session.run!("set-option", "-t", target, "@tmux-repl-executable", repl_executable)
+  session.run!("set-option", "-t", target, "@tmux-repl-state-dir", state_dir)
+
+  cleanup_command = "#{shell_quote(repl_executable)} __cleanup #{shell_quote(@name)} #{shell_quote(state_dir)}"
+  escaped_command = cleanup_command.gsub("\\", "\\\\").gsub("\"", "\\\"")
+  hook = "run-shell -b \"#{escaped_command}\""
+  session.run!("set-hook", "-t", target, "session-closed", hook)
+end
+
 private def wait_for_ready(path : String, process_name : String) : Nil
-  error_path = path.sub(/\.pid$/, ".error")
-  stage_path = path.sub(/\.pid$/, ".startup")
+  error_path = path.sub(/\\.pid$/, ".error")
+  stage_path = path.sub(/\\.pid$/, ".startup")
   deadline = Time.instant + 5.seconds
 
   while Time.instant < deadline
