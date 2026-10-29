@@ -1,14 +1,12 @@
-require 'open3'
+require "open3"
 
-def cli string = ''
+def cli(arguments = "")
   binary = "./bin/tmux-repl"
-  command = "#{binary} #{string}"
-  
-  stdout, stderr, status = Open3.capture3 command
-  exit_code = status.exitstatus
+  command = "#{binary} #{arguments}"
+  stdout, stderr, status = Open3.capture3(command)
 
-  unless exit_code == 0
-    fail "'#{command}' exited with the exit code #{exit_code}"
+  unless status.success?
+    raise "'#{command}' exited with exit code #{status.exitstatus}"
   end
 
   [stdout, stderr]
