@@ -1,4 +1,3 @@
-require "spec"
+require "../../crystal_helper"
 require "file_utils"
-require "time"
 require "../../../src/tmux_repl"
