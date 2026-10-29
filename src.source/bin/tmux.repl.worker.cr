@@ -91,7 +91,7 @@ begin
           "sequence=#{sequence}"
         )
         TmuxREPL.trace_timing(
-          session_name, "worker", "command_acknowledged", command_received_at,
+          session_name, "worker", "command_processing_finished", command_received_at,
           "sequence=#{sequence}"
         )
       end
