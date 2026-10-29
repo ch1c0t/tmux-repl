@@ -57,8 +57,8 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
 end
 
 private def wait_for_ready(path : String, process_name : String) : Nil
-  error_path = path.sub(/\\.pid$/, ".error")
-  stage_path = path.sub(/\\.pid$/, ".startup")
+  error_path = path.sub(/\.pid$/, ".error")
+  stage_path = path.sub(/\.pid$/, ".startup")
   deadline = Time.instant + 5.seconds
 
   while Time.instant < deadline
