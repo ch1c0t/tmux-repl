@@ -7,7 +7,7 @@ end
 
 private def state_dir : String
   base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-  File.expand_path(File.join(base, "tmux-repl", @name))
+  File.join(base, "tmux-repl", @name)
 end
 
 private def repl_executable : String
