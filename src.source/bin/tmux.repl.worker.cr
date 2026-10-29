@@ -51,11 +51,49 @@ begin
       if data["type"].as_s == "command"
         sequence = data["sequence"].as_i64.to_u64
         command = data["command"].as_s
+        command_received_at = Time.instant
+        TmuxREPL.trace_timing(
+          session_name, "worker", "command_received",
+          details: "sequence=#{sequence} command_bytes=#{command.bytesize}"
+        )
+
+        publish_started_at = Time.instant
         TmuxREPL.publish_event(events, "started", session_name, sequence, command: command)
+        TmuxREPL.trace_timing(
+          session_name, "worker", "started_event_confirmed", publish_started_at,
+          "sequence=#{sequence}"
+        )
+
+        pty_run_started_at = Time.instant
+        output_chunks = 0
+        output_bytes = 0
+        output_publish_ms = 0.0
+        trace_timing = TmuxREPL.trace_timing_enabled?
         result = session.run(command) do |chunk|
+          output_chunks += 1
+          output_bytes += chunk.bytesize
+
+          publish_output_at = Time.instant if trace_timing
           TmuxREPL.publish_event(events, "output", session_name, sequence, chunk: chunk)
+          if publish_started = publish_output_at
+            output_publish_ms += (Time.instant - publish_started).total_milliseconds
+          end
         end
+        TmuxREPL.trace_timing(
+          session_name, "worker", "pty_run_finished", pty_run_started_at,
+          "sequence=#{sequence} status=#{result.status} output_chunks=#{output_chunks} output_bytes=#{output_bytes} output_publish_ms=#{output_publish_ms.round(2)}"
+        )
+
+        publish_complete_at = Time.instant
         TmuxREPL.publish_event(events, "complete", session_name, sequence, command: command, status: result.status)
+        TmuxREPL.trace_timing(
+          session_name, "worker", "complete_event_confirmed", publish_complete_at,
+          "sequence=#{sequence}"
+        )
+        TmuxREPL.trace_timing(
+          session_name, "worker", "command_acknowledged", command_received_at,
+          "sequence=#{sequence}"
+        )
       end
       message.ack
     rescue ex
