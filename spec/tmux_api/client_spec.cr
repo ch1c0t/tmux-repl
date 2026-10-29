@@ -1,6 +1,4 @@
-require "spec"
-require "time"
-require "../../src/tmux"
+require "../crystal_helper"
 
 describe Tmux::Client do
   it "captures output and preserves a command's exit status" do
@@ -22,24 +20,21 @@ describe Tmux::Client do
   end
 
   it "preserves TMUX for normal interactive commands" do
-    previous = ENV["TMUX"]?
-    ENV["TMUX"] = "nested"
-
-    begin
-      Tmux::Client.new("/bin/sh").interactive!("-c", "test \"$TMUX\" = nested")
-    ensure
-      ENV["TMUX"] = previous
+    with_environment("TMUX", "nested") do
+      Tmux::Client.new("/bin/sh").interactive!(
+        "-c",
+        "test \"$TMUX\" = nested"
+      )
     end
   end
 
   it "can unset TMUX for an interactive child process" do
-    previous = ENV["TMUX"]?
-    ENV["TMUX"] = "nested"
-
-    begin
-      Tmux::Client.new("/bin/sh").interactive!("-c", "test -z \"$TMUX\"", unset_tmux: true)
-    ensure
-      ENV["TMUX"] = previous
+    with_environment("TMUX", "nested") do
+      Tmux::Client.new("/bin/sh").interactive!(
+        "-c",
+        "test -z \"$TMUX\"",
+        unset_tmux: true
+      )
     end
   end
 
@@ -47,12 +42,14 @@ describe Tmux::Client do
     base = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-api-spec-#{Process.pid}")
     binary = "#{base}.sh"
     output = "#{base}.args"
+
     File.write(binary, "#!/bin/sh\nprintf '%s\\n' \"$@\" > #{output}\n")
     File.chmod(binary, 0o755)
 
     begin
       server = Tmux::Server.new(nil, nil, binary)
       Tmux::Session.new(server, "$target").switch_client
+
       File.read(output).should eq("switch-client\n-t\n$target\n")
     ensure
       File.delete(binary) if File.exists?(binary)
