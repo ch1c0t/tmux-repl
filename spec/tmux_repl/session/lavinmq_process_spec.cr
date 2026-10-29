@@ -68,10 +68,11 @@ describe "LavinMQ-backed REPL processes" do
       environment.success?.should be_true
       environment.stdout.strip.should eq("LAVINMQ_AMQP_UNIXSOCKET=#{socket_path}")
 
-      session = server.session(name)
-      panes = session.active_window.panes
+      tmux_session = server.session(name)
+      panes = tmux_session.active_window.panes
       panes.size.should eq(2)
-      input_pane, output_pane = panes
+      input_pane = panes[0]
+      output_pane = panes[1]
 
       input_pane.send_keys("printf 'FIRST_REPL_OUTPUT\\n'", literal: true)
       pane_shows?(
@@ -109,7 +110,7 @@ describe "LavinMQ-backed REPL processes" do
       pane_text(output_pane).should_not contain("SECOND_REPL_OUTPUT")
 
       # Killing the tmux session directly must also stop the independent worker.
-      session.kill
+      tmux_session.kill
       repl_started = false
       wait_until(3.seconds, 10.milliseconds) { !File.exists?(worker_pid_path) }.should be_true
     ensure
