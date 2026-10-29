@@ -27,7 +27,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       File.write(File.join(dir, "worker.startup"), "launching #{worker_executable}")
       worker_process = Process.new(
         worker_executable,
-        ["--worker", @name],
+        ["--worker", @name, created.session_id],
         input: Process::Redirect::Close,
         output: Process::Redirect::Close,
         error: Process::Redirect::Close
