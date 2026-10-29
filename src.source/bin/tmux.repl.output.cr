@@ -48,8 +48,10 @@ begin
     begin
       data = JSON.parse(message.body_io.to_s)
       sequence = data["sequence"].as_i64.to_u64
+      event_type = data["type"].as_s
+      event_received_at = Time.instant if TmuxREPL.trace_timing_enabled?
 
-      case data["type"].as_s
+      case event_type
       when "input"
         inputs[sequence] = data["command"].as_s
         selected_sequence = sequence
@@ -62,7 +64,20 @@ begin
         statuses[sequence] = data["status"].as_i64.to_i32
       end
 
+      render_started_at = Time.instant if TmuxREPL.trace_timing_enabled?
       TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
+      if render_started = render_started_at
+        TmuxREPL.trace_timing(
+          session_name, "output", "event_rendered", render_started,
+          "type=#{event_type} sequence=#{sequence}"
+        )
+      end
+      if event_started = event_received_at
+        TmuxREPL.trace_timing(
+          session_name, "output", "event_handled", event_started,
+          "type=#{event_type} sequence=#{sequence}"
+        )
+      end
       message.ack
     rescue ex
       STDERR.puts "tmux.repl.output: invalid event: #{ex.message}"
