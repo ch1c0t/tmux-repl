@@ -42,3 +42,11 @@ def stop_tmux_server(server : Tmux::Server) : Nil
   server.kill_server
 rescue Tmux::Error
 end
+
+def with_environment(name : String, value : String?, &block : -> T) : T forall T
+  previous_value = ENV[name]?
+  ENV[name] = value
+  yield
+ensure
+  ENV[name] = previous_value
+end
