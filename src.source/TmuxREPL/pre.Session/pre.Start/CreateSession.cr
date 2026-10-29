@@ -21,7 +21,6 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       )
     end
     session = created
-    configure_lifecycle(created)
 
     unless @command
       wait_for_ready(File.join(dir, "input.pid"), "tmux.repl.input")
@@ -42,6 +41,9 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       wait_for_ready(File.join(dir, "output.pid"), "tmux.repl.output")
     end
 
+    # Install the close hook after startup succeeds. Startup failure cleanup
+    # is handled by the rescue path above.
+    configure_lifecycle(created)
     activate(created) if focus
   rescue ex
     if process = worker_process
