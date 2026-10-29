@@ -59,7 +59,9 @@ end
 
 private def configure_lifecycle(session : Tmux::Session) : Nil
   target = session.session_id
-  session.run!("set-option", "-t", target, "@tmux-repl-managed", "1")
+  managed = session.cmd("show-options", "-qv", "-t", target, "@tmux-repl-managed")
+  return if managed.success? && managed.stdout.strip == "1"
+
   session.run!("set-option", "-t", target, "@tmux-repl-executable", repl_executable)
   session.run!("set-option", "-t", target, "@tmux-repl-state-dir", state_dir)
 
@@ -67,6 +69,8 @@ private def configure_lifecycle(session : Tmux::Session) : Nil
   escaped_command = cleanup_command.gsub("\\", "\\\\").gsub("\"", "\\\"")
   hook = "run-shell -b \"#{escaped_command}\""
   session.run!("set-hook", "-t", target, "session-closed", hook)
+  # Set the marker last so a failed hook installation can be retried.
+  session.run!("set-option", "-t", target, "@tmux-repl-managed", "1")
 end
 
 private def wait_for_ready(path : String, process_name : String) : Nil
