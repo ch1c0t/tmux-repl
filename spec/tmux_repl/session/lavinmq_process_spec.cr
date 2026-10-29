@@ -112,7 +112,8 @@ describe "LavinMQ-backed REPL processes" do
       # Killing the tmux session directly must also stop the independent worker.
       tmux_session.kill
       repl_started = false
-      wait_until(3.seconds, 10.milliseconds) { !File.exists?(worker_pid_path) }.should be_true
+      # The worker checks whether its session still exists every five seconds.
+      wait_until(7.seconds, 50.milliseconds) { !File.exists?(worker_pid_path) }.should be_true
     ensure
       repl.stop if repl_started
       stop_tmux_server(server) if bootstrap_started
