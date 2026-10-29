@@ -137,9 +137,22 @@ module TmuxREPL
       end
       
       private def sibling_executable(name : String) : String
-        path = File.expand_path(PROGRAM_NAME)
-        sibling = File.join(File.dirname(path), name)
-        File::Info.executable?(sibling) ? sibling : name
+        program_path = File.expand_path(PROGRAM_NAME)
+        sibling = File.join(File.dirname(program_path), name)
+        return sibling if File::Info.executable?(sibling)
+      
+        local_bin = File.expand_path(File.join("bin", name))
+        return local_bin if File::Info.executable?(local_bin)
+      
+        if search_path = ENV["PATH"]?
+          search_path.split(':').each do |directory|
+            directory = "." if directory.empty?
+            candidate = File.expand_path(name, directory)
+            return candidate if File::Info.executable?(candidate)
+          end
+        end
+      
+        raise "Cannot find executable #{name.inspect} beside #{program_path.inspect} or on PATH"
       end
       
       private def shell_quote(value : String) : String
@@ -178,7 +191,7 @@ module TmuxREPL
               File.write(File.join(dir, "worker.startup"), "launching #{worker_executable}")
               worker_process = Process.new(
                 worker_executable,
-                ["--worker", @name],
+                ["--worker", @name, created.session_id],
                 input: Process::Redirect::Close,
                 output: Process::Redirect::Close,
                 error: Process::Redirect::Close

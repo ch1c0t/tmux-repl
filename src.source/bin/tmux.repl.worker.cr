@@ -74,6 +74,7 @@ begin
   # The worker belongs to the tmux session, not to a pane or the attached
   # client. Detaching leaves the session alive and therefore keeps the worker.
   loop do
+    sleep 5.seconds
     break unless tmux_server.cmd("has-session", "-t", tmux_session_id).success?
 
     select
