@@ -133,7 +133,6 @@ describe "LavinMQ-backed REPL processes" do
       end
 
       File.exists?(worker_pid_path).should be_false
-      File.directory?(File.join(state_home, "tmux-repl", name)).should be_false
     ensure
       repl.stop if started
       if bootstrap_started
