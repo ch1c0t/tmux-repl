@@ -27,7 +27,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       File.write(File.join(dir, "worker.startup"), "launching #{worker_executable}")
       worker_process = Process.new(
         worker_executable,
-        ["--worker", @name],
+        ["--worker", @name, created.session_id],
         input: Process::Redirect::Close,
         output: Process::Redirect::Close,
         error: Process::Redirect::Close
@@ -41,9 +41,6 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
       wait_for_ready(File.join(dir, "output.pid"), "tmux.repl.output")
     end
 
-    # Install the close hook after startup succeeds. Startup failure cleanup
-    # is handled by the rescue path above.
-    configure_lifecycle(created)
     activate(created) if focus
   rescue ex
     if process = worker_process
@@ -57,22 +54,6 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
     STDERR.puts "tmux.repl: #{ex.message}"
     raise ex
   end
-end
-
-private def configure_lifecycle(session : Tmux::Session) : Nil
-  target = session.session_id
-  managed = session.cmd("show-options", "-qv", "-t", target, "@tmux-repl-managed")
-  return if managed.success? && managed.stdout.strip == "1"
-
-  session.run!("set-option", "-t", target, "@tmux-repl-executable", repl_executable)
-  session.run!("set-option", "-t", target, "@tmux-repl-state-dir", state_dir)
-
-  cleanup_command = "#{shell_quote(repl_executable)} __cleanup #{shell_quote(@name)} #{shell_quote(state_dir)}"
-  escaped_command = cleanup_command.gsub("\\", "\\\\").gsub("\"", "\\\"")
-  hook = "run-shell -b \"#{escaped_command}\""
-  session.run!("set-hook", "-t", target, "session-closed", hook)
-  # Set the marker last so a failed hook installation can be retried.
-  session.run!("set-option", "-t", target, "@tmux-repl-managed", "1")
 end
 
 private def wait_for_ready(path : String, process_name : String) : Nil
