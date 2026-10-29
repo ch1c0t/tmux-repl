@@ -2,12 +2,17 @@ require "pty"
 require "../tmux_repl"
 
 unless ARGV[0]? == "--worker"
-  STDERR.puts "Usage: tmux.repl.worker --worker SESSION"
+  STDERR.puts "Usage: tmux.repl.worker --worker SESSION SESSION_ID"
   exit 2
 end
 
 unless session_name = ARGV[1]?
   STDERR.puts "Missing session name."
+  exit 2
+end
+
+unless tmux_session_id = ARGV[2]?
+  STDERR.puts "Missing tmux session ID."
   exit 2
 end
 
@@ -62,9 +67,21 @@ begin
     end
   end
 
+  tmux_server = ENV["TMUX"]?.nil? ? Tmux::Server.new : Tmux::Server.from_env
   File.write(ready_path, Process.pid.to_s)
   File.delete(startup_stage_path) if File.exists?(startup_stage_path)
-  shutdown.receive
+
+  # The worker belongs to the tmux session, not to a pane or the attached
+  # client. Detaching leaves the session alive and therefore keeps the worker.
+  loop do
+    break unless tmux_server.cmd("has-session", "-t", tmux_session_id).success?
+
+    select
+    when shutdown.receive
+      break
+    when timeout(250.milliseconds)
+    end
+  end
 rescue ex
   File.write(startup_error_path, "#{ex.class}: #{ex.message}")
   STDERR.puts "tmux.repl.worker: #{ex.class}: #{ex.message}"
