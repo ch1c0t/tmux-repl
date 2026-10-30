@@ -100,6 +100,39 @@ describe "LavinMQ-backed REPL processes" do
         raise "Second command did not complete.\n#{lavinmq_diagnostics(name, input_pane, output_pane)}"
       end
 
+      input_pane.send_keys(":prev", literal: true)
+      pane_shows?(
+        output_pane,
+        ["INPUT #1", "FIRST_REPL_OUTPUT", "[exit status: 0]"],
+        5.seconds,
+        25.milliseconds
+      ).should be_true
+      pane_text(output_pane).should_not contain("SECOND_REPL_OUTPUT")
+
+      input_pane.send_keys(":next", literal: true)
+      pane_shows?(
+        output_pane,
+        ["INPUT #2", "SECOND_REPL_OUTPUT", "[exit status: 0]"],
+        5.seconds,
+        25.milliseconds
+      ).should be_true
+
+      input_pane.send_keys(":list", literal: true)
+      pane_shows?(
+        input_pane,
+        ["#1: printf", "* #2: printf"],
+        5.seconds,
+        25.milliseconds
+      ).should be_true
+
+      input_pane.send_keys(":help", literal: true)
+      pane_shows?(
+        input_pane,
+        [":select ID", ":prev", ":next", ":list"],
+        5.seconds,
+        25.milliseconds
+      ).should be_true
+
       input_pane.send_keys(":select 1", literal: true)
       pane_shows?(
         output_pane,
