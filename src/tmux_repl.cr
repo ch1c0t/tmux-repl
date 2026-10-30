@@ -67,43 +67,103 @@ module TmuxREPL
     publish_message(queue, "command", session_name, sequence, command: command)
   end
   
-  def self.render_output(
-    sequence : UInt64?,
-    inputs : Hash(UInt64, String),
-    outputs : Hash(UInt64, String),
-    statuses : Hash(UInt64, Int32)
+  # Optional timing diagnostics for tracing command latency across the separate
+  # input, worker, and output processes. Disabled unless explicitly requested.
+  def self.trace_timing_enabled? : Bool
+    ENV["TMUX_REPL_TRACE_TIMING"]? == "1"
+  end
+  
+  def self.trace_timing(
+    session_name : String,
+    component : String,
+    event : String,
+    started_at : Time::Instant? = nil,
+    details : String = ""
   ) : Nil
-    STDOUT.print "\e[H\e[2J"
-    STDOUT.flush
+    return unless trace_timing_enabled?
   
-    unless selected = sequence
-      puts "No inputs yet."
-      STDOUT.flush
-      return
+    trace_path = ENV["TMUX_REPL_TRACE_FILE"]?
+    unless trace_path
+      base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
+      trace_path = File.join(base, "tmux-repl", session_name, "timing.log")
     end
   
-    command = inputs[selected]?
-    unless command
-      puts "Waiting for input ##{selected}..."
-      STDOUT.flush
-      return
-    end
-  
-    puts "INPUT ##{selected}"
-    puts command
-    puts "─" * 40
-  
-    if output = outputs[selected]?
-      print output
-      puts unless output.ends_with?("\n") || output.empty?
+    elapsed = if start = started_at
+      " elapsed_ms=#{(Time.instant - start).total_milliseconds.round(2)}"
     else
-      puts "(running...)"
+      ""
     end
+    detail_suffix = details.empty? ? "" : " #{details}"
   
-    if status = statuses[selected]?
-      puts "[exit status: #{status}]"
+    File.open(trace_path, "a") do |file|
+      file.puts "#{Time.utc} [#{component}] #{event}#{elapsed}#{detail_suffix}"
     end
-    STDOUT.flush
+  rescue
+    # Diagnostic tracing must never interfere with REPL command execution.
+  end
+
+  class OutputView
+    @inputs = {} of UInt64 => String
+    @outputs = {} of UInt64 => String
+    @statuses = {} of UInt64 => Int32
+    @selected_sequence : UInt64?
+    
+    def initialize
+      @selected_sequence = nil
+    end
+    
+    # Apply one event from the session event stream to the displayed view.
+    def update(event : JSON::Any) : Nil
+      sequence = event["sequence"].as_i64.to_u64
+    
+      case event["type"].as_s
+      when "input"
+        @inputs[sequence] = event["command"].as_s
+        @selected_sequence = sequence
+      when "select"
+        @selected_sequence = sequence if @inputs.has_key?(sequence)
+      when "output"
+        chunk = event["chunk"].as_s
+        @outputs[sequence] = @outputs.fetch(sequence, "") + chunk
+      when "complete"
+        @statuses[sequence] = event["status"].as_i64.to_i32
+      end
+    end
+    
+    # Draw the currently selected input and its output.
+    def render(io : IO = STDOUT) : Nil
+      io.print "\e[H\e[2J"
+      io.flush
+    
+      unless selected = @selected_sequence
+        io.puts "No inputs yet."
+        io.flush
+        return
+      end
+    
+      command = @inputs[selected]?
+      unless command
+        io.puts "Waiting for input ##{selected}..."
+        io.flush
+        return
+      end
+    
+      io.puts "INPUT ##{selected}"
+      io.puts command
+      io.puts "─" * 40
+    
+      if output = @outputs[selected]?
+        io.print output
+        io.puts unless output.ends_with?("\n") || output.empty?
+      else
+        io.puts "(running...)"
+      end
+    
+      if status = @statuses[selected]?
+        io.puts "[exit status: #{status}]"
+      end
+      io.flush
+    end
   end
 
   class Session
@@ -112,7 +172,12 @@ module TmuxREPL
         socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]?
         raise "Missing critical environment configuration variable: LAVINMQ_AMQP_UNIXSOCKET" unless socket_path
       
-        {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+        environment = {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+        if TmuxREPL.trace_timing_enabled?
+          environment["TMUX_REPL_TRACE_TIMING"] = "1"
+          environment["TMUX_REPL_TRACE_FILE"] = File.join(state_dir, "timing.log")
+        end
+        environment
       end
       
       private def state_dir : String

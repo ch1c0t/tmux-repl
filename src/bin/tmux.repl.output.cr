@@ -45,10 +45,7 @@ begin
   File.write(startup_stage_path, "declaring event stream")
   event_queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
   events = event_queue
-  inputs = {} of UInt64 => String
-  outputs = {} of UInt64 => String
-  statuses = {} of UInt64 => Int32
-  selected_sequence : UInt64? = nil
+  view = TmuxREPL::OutputView.new
   shutdown = Channel(Nil).new(1)
 
   Process.on_terminate do |_reason|
@@ -64,21 +61,25 @@ begin
     begin
       data = JSON.parse(message.body_io.to_s)
       sequence = data["sequence"].as_i64.to_u64
+      event_type = data["type"].as_s
+      event_received_at = Time.instant if TmuxREPL.trace_timing_enabled?
 
-      case data["type"].as_s
-      when "input"
-        inputs[sequence] = data["command"].as_s
-        selected_sequence = sequence
-      when "select"
-        selected_sequence = sequence if inputs.has_key?(sequence)
-      when "output"
-        chunk = data["chunk"].as_s
-        outputs[sequence] = outputs.fetch(sequence, "") + chunk
-      when "complete"
-        statuses[sequence] = data["status"].as_i64.to_i32
+      view.update(data)
+
+      render_started_at = Time.instant if TmuxREPL.trace_timing_enabled?
+      view.render
+      if render_started = render_started_at
+        TmuxREPL.trace_timing(
+          session_name, "output", "event_rendered", render_started,
+          "type=#{event_type} sequence=#{sequence}"
+        )
       end
-
-      TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
+      if event_started = event_received_at
+        TmuxREPL.trace_timing(
+          session_name, "output", "event_handled", event_started,
+          "type=#{event_type} sequence=#{sequence}"
+        )
+      end
       message.ack
     rescue ex
       STDERR.puts "tmux.repl.output: invalid event: #{ex.message}"
@@ -89,7 +90,7 @@ begin
     end
   end
 
-  TmuxREPL.render_output(selected_sequence, inputs, outputs, statuses)
+  view.render
   File.write(output_pid_path, Process.pid.to_s)
   File.delete(startup_stage_path) if File.exists?(startup_stage_path)
   shutdown.receive
