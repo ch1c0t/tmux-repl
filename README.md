@@ -99,3 +99,18 @@ crystal spec
 ```
 
 The API end-to-end spec starts a separate Tmux server using a unique socket.
+
+### Tracing command latency
+
+Start a new session with timing diagnostics enabled:
+
+```sh
+TMUX_REPL_TRACE_TIMING=1 tmux.repl start latency-debug
+```
+
+Run a few commands, including the first one, then inspect
+`$XDG_STATE_HOME/tmux-repl/latency-debug/timing.log` (or
+`$HOME/.local/state/tmux-repl/latency-debug/timing.log` when
+`XDG_STATE_HOME` is unset). The trace separates input publication, worker
+delivery, PTY execution, output-event publication, and output-pane rendering.
+Tracing is disabled by default.
