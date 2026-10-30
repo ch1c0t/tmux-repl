@@ -61,46 +61,6 @@ def self.publish_command(
   publish_message(queue, "command", session_name, sequence, command: command)
 end
 
-def self.render_output(
-  sequence : UInt64?,
-  inputs : Hash(UInt64, String),
-  outputs : Hash(UInt64, String),
-  statuses : Hash(UInt64, Int32)
-) : Nil
-  STDOUT.print "\e[H\e[2J"
-  STDOUT.flush
-
-  unless selected = sequence
-    puts "No inputs yet."
-    STDOUT.flush
-    return
-  end
-
-  command = inputs[selected]?
-  unless command
-    puts "Waiting for input ##{selected}..."
-    STDOUT.flush
-    return
-  end
-
-  puts "INPUT ##{selected}"
-  puts command
-  puts "─" * 40
-
-  if output = outputs[selected]?
-    print output
-    puts unless output.ends_with?("\n") || output.empty?
-  else
-    puts "(running...)"
-  end
-
-  if status = statuses[selected]?
-    puts "[exit status: #{status}]"
-  end
-  STDOUT.flush
-end
-
-
 # Optional timing diagnostics for tracing command latency across the separate
 # input, worker, and output processes. Disabled unless explicitly requested.
 def self.trace_timing_enabled? : Bool
