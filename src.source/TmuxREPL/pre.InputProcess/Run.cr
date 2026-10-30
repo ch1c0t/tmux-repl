@@ -1,5 +1,5 @@
 # Connect to the command and event streams, then read and dispatch user input.
-def run : Nil
+def run(&reader_factory : String -> R) : Nil forall R
   prepare_startup
 
   begin
@@ -12,7 +12,7 @@ def run : Nil
     events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
 
     update_startup_stage("initializing Reply reader")
-    reader = InputReader.new(input_pid_path)
+    reader = yield input_pid_path
     File.delete(startup_stage_path) if File.exists?(startup_stage_path)
 
     history = InputHistory.new
