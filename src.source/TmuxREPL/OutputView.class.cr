@@ -4,6 +4,10 @@ class OutputView
   @statuses = {} of UInt64 => Int32
   @selected_sequence : UInt64?
 
+  def initialize
+    @selected_sequence = nil
+  end
+
   # Apply one event from the session event stream to the displayed view.
   def update(event : JSON::Any) : Nil
     sequence = event["sequence"].as_i64.to_u64
