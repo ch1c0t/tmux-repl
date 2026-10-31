@@ -8,6 +8,7 @@ module LavinMQProcess
     @previous_environment : Hash(String, String?)
     @server : Tmux::Server
     @repl : TmuxREPL::Session
+    @stage = "initialization"
     @bootstrap_started = false
     @repl_started = false
     @tmux_session : Tmux::Session?
@@ -32,11 +33,19 @@ module LavinMQProcess
 
     def run : Nil
       begin
+        @stage = "startup"
         start
+
+        @stage = "input history and command selection"
         verify_selection
+
+        @stage = "streaming, completion, and Ctrl+G view toggling"
         verify_streaming_and_toggle
+
+        @stage = "worker shutdown"
         stop_worker
       ensure
+        @stage = "cleanup"
         cleanup
       end
     end

@@ -15,20 +15,43 @@ module LavinMQProcess
 
       @repl.start(focus: false)
       @repl_started = true
-      @ready_paths.each do |path|
-        raise "REPL process did not become ready: #{path}" unless wait_for_file(path)
+      @ready_paths.each { |path| expect_ready_file(path) }
+
+      socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]?
+      unless socket_path
+        fail_with_diagnostics("LAVINMQ_AMQP_UNIXSOCKET is not set in the test process.")
       end
 
-      socket_path = ENV["LAVINMQ_AMQP_UNIXSOCKET"]? || raise "LAVINMQ_AMQP_UNIXSOCKET is not set"
       environment = @server.cmd("show-environment", "-t", name, "LAVINMQ_AMQP_UNIXSOCKET")
-      environment.success?.should be_true
-      environment.stdout.strip.should eq("LAVINMQ_AMQP_UNIXSOCKET=#{socket_path}")
+      expect_condition(
+        environment.success?,
+        "tmux could not read LAVINMQ_AMQP_UNIXSOCKET from session #{name}.\n" \
+        "stdout: #{environment.stdout.inspect}\nstderr: #{environment.stderr.inspect}"
+      )
+      expect_equal(
+        "LAVINMQ_AMQP_UNIXSOCKET=#{socket_path}",
+        environment.stdout.strip,
+        "The REPL tmux session did not inherit the LavinMQ socket environment variable."
+      )
 
       @tmux_session = @server.session(name)
       panes = tmux_session.active_window.panes
-      panes.size.should eq(2)
+      expect_equal(
+        2,
+        panes.size,
+        "Expected the REPL tmux window to contain exactly an input pane and an output pane."
+      )
       @input_pane = panes[0]
       @output_pane = panes[1]
+    end
+
+    private def expect_ready_file(path : String, timeout : Time::Span = 5.seconds) : Nil
+      return if wait_for_file(path, timeout)
+
+      fail_with_diagnostics(
+        "Timed out after #{timeout} waiting for a REPL process readiness file: #{path}.\n" \
+        "The input, worker, and output processes should each create their PID file during startup."
+      )
     end
   end
 end

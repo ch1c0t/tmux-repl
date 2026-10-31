@@ -5,10 +5,7 @@ module LavinMQProcess
       input_pane.send_keys(command, literal: true)
 
       # The transcript is raw while the command is running.
-      expect_output("Streaming Tick 1...", "START_MARK_", timeout: 3.seconds)
-      raw = pane_text(output_pane)
-      raw.should contain("END_MARK_")
-      raw.should contain("Streaming Tick 1...")
+      expect_output("Streaming Tick 1...", "START_MARK_", "END_MARK_", timeout: 3.seconds)
 
       # Completion replaces that transcript with the stripped PTY result.
       expect_output("Streaming Tick 4...", "[exit status: 0]")

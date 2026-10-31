@@ -3,8 +3,15 @@ module LavinMQProcess
     private def stop_worker : Nil
       tmux_session.kill
       @repl_started = false
+
       # The worker checks whether its Tmux session still exists every five seconds.
-      wait_until(7.seconds, 50.milliseconds) { !File.exists?(@worker_pid_path) }.should be_true
+      stopped = wait_until(7.seconds, 50.milliseconds) { !File.exists?(@worker_pid_path) }
+      return if stopped
+
+      fail_with_diagnostics(
+        "The worker did not remove its PID file within 7 seconds after the Tmux session was killed.\n" \
+        "Worker PID file: #{@worker_pid_path} (#{file_state(@worker_pid_path)})."
+      )
     end
 
     private def cleanup : Nil
