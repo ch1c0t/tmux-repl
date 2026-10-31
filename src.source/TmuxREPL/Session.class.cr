@@ -4,15 +4,26 @@ getter environment : Hash(String, String)
 getter start_directory : String?
 
 # Resolve companion executables against the directory containing the invoking
-# tmux.repl executable. A library host without sibling companions falls back to
-# normal PATH lookup.
+# tmux.repl executable, then against the caller's PATH.
 module CompanionExecutable
-  def self.resolve(name : String, program_path : String) : String
+  def self.resolve(
+    name : String,
+    program_path : String,
+    search_path : String? = ENV["PATH"]?
+  ) : String
     program_path = File.expand_path(program_path)
     sibling = File.join(File.dirname(program_path), name)
     return sibling if File::Info.executable?(sibling)
 
-    name
+    if search_path
+      search_path.split(':').each do |directory|
+        directory = "." if directory.empty?
+        candidate = File.expand_path(name, directory)
+        return candidate if File::Info.executable?(candidate)
+      end
+    end
+
+    raise "Cannot find executable #{name.inspect} beside #{program_path.inspect} or on PATH"
   end
 end
 
