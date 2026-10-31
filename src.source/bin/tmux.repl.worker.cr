@@ -93,7 +93,7 @@ module TmuxREPL
         commands.subscribe(
           no_ack: false,
           block: false,
-          args: {"x-stream-offset" => "next"}
+          args: AMQ::Protocol::Table.new({"x-stream-offset" => "next"} of String => AMQ::Protocol::Field)
         ) do |message|
           begin
             data = JSON.parse(message.body_io.to_s)
