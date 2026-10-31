@@ -4,6 +4,12 @@ require "./tmux"
 require "global-amqp_channel"
 
 module TmuxREPL
+  def self.define(name : String, &configure : Definition ->) : Definition
+    definition = Definition.new(name)
+    yield definition
+    definition
+  end
+  
   def self.component_name(session_name : String) : String
     component = session_name.gsub(/[^a-zA-Z0-9._-]/, "_")
     component = "session" if component.empty?
@@ -102,75 +108,143 @@ module TmuxREPL
     # Diagnostic tracing must never interfere with REPL command execution.
   end
 
-  class OutputView
-    module Render
-      # Draw the currently selected input and its output.
-      def render(io : IO = STDOUT) : Nil
-        io.print "\e[H\e[2J"
-        io.flush
-      
-        unless selected = @selected_sequence
-          io.puts "No inputs yet."
-          io.flush
-          return
-        end
-      
-        command = @inputs[selected]?
-        unless command
-          io.puts "Waiting for input ##{selected}..."
-          io.flush
-          return
-        end
-      
-        io.puts "INPUT ##{selected}"
-        io.puts command
-        io.puts "─" * 40
-      
-        if output = @outputs[selected]?
-          io.print output
-          io.puts unless output.ends_with?("\n") || output.empty?
-        else
-          io.puts "(running...)"
-        end
-      
-        if status = @statuses[selected]?
-          io.puts "[exit status: #{status}]"
-        end
-        io.flush
-      end
+  class Definition
+    getter name : String
+    
+    @command : Array(String)?
+    @environment : Hash(String, String)
+    @start_directory : String?
+    @input_executable : String?
+    @output_executable : String?
+    @worker_executable : String?
+    
+    def initialize(@name : String)
+      @command = nil
+      @environment = {} of String => String
+      @start_directory = nil
+      @input_executable = nil
+      @output_executable = nil
+      @worker_executable = nil
     end
-  
-    module Update
-      # Apply one event from the session event stream to the displayed view.
-      def update(event : JSON::Any) : Nil
-        sequence = event["sequence"].as_i64.to_u64
-      
-        case event["type"].as_s
-        when "input"
-          @inputs[sequence] = event["command"].as_s
-          @selected_sequence = sequence
-        when "select"
-          @selected_sequence = sequence if @inputs.has_key?(sequence)
-        when "output"
-          chunk = event["chunk"].as_s
-          @outputs[sequence] = @outputs.fetch(sequence, "") + chunk
-        when "complete"
-          @statuses[sequence] = event["status"].as_i64.to_i32
-        end
-      end
+    
+    # Configure a native interactive program for this REPL.
+    # With no command configured, the standard shell/PTY worker is used.
+    def command(*arguments : String) : self
+      configure_command(arguments.to_a)
     end
-  
-    @inputs = {} of UInt64 => String
-    @outputs = {} of UInt64 => String
-    @statuses = {} of UInt64 => Int32
+    
+    def command(arguments : Array(String)) : self
+      configure_command(arguments)
+    end
+    
+    def env(name : String, value : String) : self
+      @environment[name] = value
+      self
+    end
+    
+    def env(values : Hash(String, String)) : self
+      @environment.merge!(values)
+      self
+    end
+    
+    def cwd(path : String) : self
+      @start_directory = path
+      self
+    end
+    
+    # Override any of the companion processes independently. Unspecified
+    # executables continue to use the normal sibling/PATH discovery.
+    def executables(
+      input : String? = nil,
+      output : String? = nil,
+      worker : String? = nil
+    ) : self
+      @input_executable = input unless input.nil?
+      @output_executable = output unless output.nil?
+      @worker_executable = worker unless worker.nil?
+      self
+    end
+    
+    def session : Session
+      Session.new(
+        @name,
+        command: @command,
+        environment: @environment,
+        start_directory: @start_directory,
+        input_executable: @input_executable,
+        output_executable: @output_executable,
+        worker_executable: @worker_executable
+      )
+    end
+    
+    def start(focus : Bool = true) : Session
+      repl_session = session
+      repl_session.start(focus)
+      repl_session
+    end
+    
+    def stop : Nil
+      session.stop
+    end
+    
+    private def configure_command(arguments : Array(String)) : self
+      raise ArgumentError.new("REPL command must not be empty") if arguments.empty?
+    
+      @command = arguments.dup
+      self
+    end
+  end
+
+  class InputHistory
+    getter entries : Array(Tuple(UInt64, String))
+    getter selected_sequence : UInt64?
+    
+    @sequence = 0_u64
+    @entries = [] of Tuple(UInt64, String)
     @selected_sequence : UInt64?
     
     def initialize
       @selected_sequence = nil
     end
     
-    include Update
-    include Render
+    def add(expression : String) : UInt64
+      @sequence &+= 1_u64
+      @entries << {@sequence, expression}
+      @selected_sequence = @sequence
+      @sequence
+    end
+    
+    def includes?(sequence : UInt64) : Bool
+      @entries.any? { |entry| entry[0] == sequence }
+    end
+    
+    def select(sequence : UInt64) : Bool
+      return false unless includes?(sequence)
+    
+      @selected_sequence = sequence
+      true
+    end
+    
+    def previous_sequence : UInt64?
+      adjacent_sequence(-1)
+    end
+    
+    def next_sequence : UInt64?
+      adjacent_sequence(1)
+    end
+    
+    private def adjacent_sequence(direction : Int32) : UInt64?
+      selected = @selected_sequence
+      return unless selected
+    
+      index = @entries.index { |entry| entry[0] == selected }
+      return unless index
+    
+      target_index = index + direction
+      return if target_index < 0 || target_index >= @entries.size
+    
+      @entries[target_index][0]
+    end
   end
 
   class Session
@@ -180,6 +254,7 @@ module TmuxREPL
         raise "Missing critical environment configuration variable: LAVINMQ_AMQP_UNIXSOCKET" unless socket_path
       
         environment = {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+        environment.merge!(@environment)
         if TmuxREPL.trace_timing_enabled?
           environment["TMUX_REPL_TRACE_TIMING"] = "1"
           environment["TMUX_REPL_TRACE_FILE"] = File.join(state_dir, "timing.log")
@@ -192,39 +267,19 @@ module TmuxREPL
         File.join(base, "tmux-repl", @name)
       end
       
-      private def repl_executable : String
-        sibling_executable("tmux.repl")
+      private def resolved_input_executable : String
+        override = @input_executable || ENV["TMUX_REPL_INPUT_EXECUTABLE"]?
+        CompanionExecutable.resolve("tmux.repl.input", PROGRAM_NAME, override)
       end
       
-      private def input_executable : String
-        sibling_executable("tmux.repl.input")
+      private def resolved_output_executable : String
+        override = @output_executable || ENV["TMUX_REPL_OUTPUT_EXECUTABLE"]?
+        CompanionExecutable.resolve("tmux.repl.output", PROGRAM_NAME, override)
       end
       
-      private def output_executable : String
-        sibling_executable("tmux.repl.output")
-      end
-      
-      private def worker_executable : String
-        sibling_executable("tmux.repl.worker")
-      end
-      
-      private def sibling_executable(name : String) : String
-        program_path = File.expand_path(PROGRAM_NAME)
-        sibling = File.join(File.dirname(program_path), name)
-        return sibling if File::Info.executable?(sibling)
-      
-        local_bin = File.expand_path(File.join("bin", name))
-        return local_bin if File::Info.executable?(local_bin)
-      
-        if search_path = ENV["PATH"]?
-          search_path.split(':').each do |directory|
-            directory = "." if directory.empty?
-            candidate = File.expand_path(name, directory)
-            return candidate if File::Info.executable?(candidate)
-          end
-        end
-      
-        raise "Cannot find executable #{name.inspect} beside #{program_path.inspect} or on PATH"
+      private def resolved_worker_executable : String
+        override = @worker_executable || ENV["TMUX_REPL_WORKER_EXECUTABLE"]?
+        CompanionExecutable.resolve("tmux.repl.worker", PROGRAM_NAME, override)
       end
       
       private def shell_quote(value : String) : String
@@ -242,39 +297,45 @@ module TmuxREPL
           begin
             FileUtils.mkdir_p(dir)
             unless @command
-              File.write(File.join(dir, "input.startup"), "launching #{input_executable}")
+              File.write(File.join(dir, "input.startup"), "launching #{resolved_input_executable}")
             end
         
             created = if @command
               File.write(File.join(dir, "output.log"), "")
-              server.new_session(name: @name, detached: true)
+              server.new_session(
+                name: @name,
+                detached: true,
+                start_directory: @start_directory,
+                environment: @environment
+              )
             else
               server.new_session(
                 name: @name,
                 detached: true,
-                command: [input_executable, "--input", @name],
+                start_directory: @start_directory,
+                command: [resolved_input_executable, "--input", @name],
                 environment: amqp_environment
               )
             end
             session = created
         
             unless @command
-              wait_for_ready(File.join(dir, "input.pid"), "tmux.repl.input")
-              File.write(File.join(dir, "worker.startup"), "launching #{worker_executable}")
+              wait_for_ready(File.join(dir, "input.pid"), resolved_input_executable)
+              File.write(File.join(dir, "worker.startup"), "launching #{resolved_worker_executable}")
               worker_process = Process.new(
-                worker_executable,
+                resolved_worker_executable,
                 ["--worker", @name, created.session_id],
                 input: Process::Redirect::Close,
                 output: Process::Redirect::Close,
                 error: Process::Redirect::Close
               )
-              wait_for_ready(File.join(dir, "worker.pid"), "tmux.repl.worker")
+              wait_for_ready(File.join(dir, "worker.pid"), resolved_worker_executable)
             end
         
             configure_session(created)
         
             unless @command
-              wait_for_ready(File.join(dir, "output.pid"), "tmux.repl.output")
+              wait_for_ready(File.join(dir, "output.pid"), resolved_output_executable)
             end
         
             activate(created) if focus
@@ -327,15 +388,15 @@ module TmuxREPL
             input_pane.split(
               :right,
               detached: true,
-              command: [output_executable, "--log", log]
+              command: [resolved_output_executable, "--log", log]
             )
             input_pane.send_keys(input_command, literal: true)
           else
-            File.write(File.join(state_dir, "output.startup"), "launching #{output_executable}")
+            File.write(File.join(state_dir, "output.startup"), "launching #{resolved_output_executable}")
             input_pane.split(
               :right,
               detached: true,
-              command: [output_executable, @name]
+              command: [resolved_output_executable, @name]
             )
           end
         
@@ -432,8 +493,66 @@ module TmuxREPL
   
     getter name : String
     getter command : Array(String)?
+    getter environment : Hash(String, String)
+    getter start_directory : String?
+    getter input_executable : String?
+    getter output_executable : String?
+    getter worker_executable : String?
     
-    def initialize(@name : String, @command : Array(String)? = nil)
+    # Resolve companion executables in this order:
+    # explicit override, sibling of tmux.repl, then caller's PATH.
+    module CompanionExecutable
+      def self.resolve(
+        name : String,
+        program_path : String,
+        override : String? = nil,
+        search_path : String? = ENV["PATH"]?
+      ) : String
+        if configured = override
+          candidate = if configured.includes?('/')
+            File.expand_path(configured)
+          else
+            find_on_path(configured, search_path)
+          end
+    
+          return candidate if candidate && File::Info.executable?(candidate)
+    
+          raise "Configured executable override #{configured.inspect} for #{name.inspect} is not executable or could not be found on PATH"
+        end
+    
+        program_path = File.expand_path(program_path)
+        sibling = File.join(File.dirname(program_path), name)
+        return sibling if File::Info.executable?(sibling)
+    
+        if candidate = find_on_path(name, search_path)
+          return candidate
+        end
+    
+        raise "Cannot find executable #{name.inspect} beside #{program_path.inspect} or on PATH"
+      end
+    
+      private def self.find_on_path(name : String, search_path : String?) : String?
+        return nil unless search_path
+    
+        search_path.split(':').each do |directory|
+          directory = "." if directory.empty?
+          candidate = File.expand_path(name, directory)
+          return candidate if File::Info.executable?(candidate)
+        end
+    
+        nil
+      end
+    end
+    
+    def initialize(
+      @name : String,
+      @command : Array(String)? = nil,
+      @environment : Hash(String, String) = {} of String => String,
+      @start_directory : String? = nil,
+      @input_executable : String? = nil,
+      @output_executable : String? = nil,
+      @worker_executable : String? = nil
+    )
       if command = @command
         raise ArgumentError.new("REPL command must not be empty") if command.empty?
       end
