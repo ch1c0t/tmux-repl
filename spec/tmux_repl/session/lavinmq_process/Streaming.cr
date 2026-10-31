@@ -1,5 +1,5 @@
 module LavinMQProcess
-  class Scenario
+  module Streaming
     private def verify_streaming_and_toggle : Nil
       command = %(for i in $(seq 1 4); do echo "Streaming Tick $i..." && sleep 0.2; done)
       input_pane.send_keys(command, literal: true)

@@ -1,5 +1,5 @@
 module LavinMQProcess
-  class Scenario
+  module Selection
     private def verify_selection : Nil
       submit_and_expect("printf 'FIRST_REPL_OUTPUT\\n'", 1, "FIRST_REPL_OUTPUT")
       submit_and_expect("printf 'SECOND_REPL_OUTPUT\\n'", 2, "SECOND_REPL_OUTPUT")

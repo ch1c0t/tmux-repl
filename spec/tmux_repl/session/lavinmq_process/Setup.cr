@@ -1,5 +1,5 @@
 module LavinMQProcess
-  class Scenario
+  module Setup
     private def start : Nil
       ENV["XDG_STATE_HOME"] = @state_home
       FileUtils.mkdir_p(@state_home)

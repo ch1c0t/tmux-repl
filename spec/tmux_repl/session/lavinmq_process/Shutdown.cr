@@ -1,5 +1,5 @@
 module LavinMQProcess
-  class Scenario
+  module Shutdown
     private def stop_worker : Nil
       tmux_session.kill
       @repl_started = false

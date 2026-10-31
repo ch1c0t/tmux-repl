@@ -1,5 +1,5 @@
 module LavinMQProcess
-  class Scenario
+  module Diagnostics
     private def diagnostic_details : String
       details = "input pane:\n#{pane_text(input_pane)}\noutput pane:\n#{pane_text(output_pane)}"
 
