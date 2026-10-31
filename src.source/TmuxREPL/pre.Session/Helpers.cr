@@ -3,6 +3,7 @@ private def amqp_environment : Hash(String, String)
   raise "Missing critical environment configuration variable: LAVINMQ_AMQP_UNIXSOCKET" unless socket_path
 
   environment = {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
+  environment.merge!(@environment)
   if TmuxREPL.trace_timing_enabled?
     environment["TMUX_REPL_TRACE_TIMING"] = "1"
     environment["TMUX_REPL_TRACE_FILE"] = File.join(state_dir, "timing.log")
@@ -15,39 +16,18 @@ private def state_dir : String
   File.join(base, "tmux-repl", @name)
 end
 
-private def repl_executable : String
-  sibling_executable("tmux.repl")
-end
-
+# These companion programs are installed as separate executables and resolved
+# by the operating system through PATH, not relative to the calling program.
 private def input_executable : String
-  sibling_executable("tmux.repl.input")
+  "tmux.repl.input"
 end
 
 private def output_executable : String
-  sibling_executable("tmux.repl.output")
+  "tmux.repl.output"
 end
 
 private def worker_executable : String
-  sibling_executable("tmux.repl.worker")
-end
-
-private def sibling_executable(name : String) : String
-  program_path = File.expand_path(PROGRAM_NAME)
-  sibling = File.join(File.dirname(program_path), name)
-  return sibling if File::Info.executable?(sibling)
-
-  local_bin = File.expand_path(File.join("bin", name))
-  return local_bin if File::Info.executable?(local_bin)
-
-  if search_path = ENV["PATH"]?
-    search_path.split(':').each do |directory|
-      directory = "." if directory.empty?
-      candidate = File.expand_path(name, directory)
-      return candidate if File::Info.executable?(candidate)
-    end
-  end
-
-  raise "Cannot find executable #{name.inspect} beside #{program_path.inspect} or on PATH"
+  "tmux.repl.worker"
 end
 
 private def shell_quote(value : String) : String

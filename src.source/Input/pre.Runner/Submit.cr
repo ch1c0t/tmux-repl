@@ -3,7 +3,7 @@ private def submit(
   expression : String,
   events : AMQP::Client::Queue,
   commands : AMQP::Client::Queue,
-  history : InputHistory
+  history : History
 ) : Nil
   sequence = history.add(expression)
   command_received_at = Time.instant

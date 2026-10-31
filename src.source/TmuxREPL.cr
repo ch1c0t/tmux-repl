@@ -1,3 +1,9 @@
+def self.define(name : String, &configure : Definition ->) : Definition
+  definition = Definition.new(name)
+  yield definition
+  definition
+end
+
 def self.component_name(session_name : String) : String
   component = session_name.gsub(/[^a-zA-Z0-9._-]/, "_")
   component = "session" if component.empty?
@@ -95,4 +101,3 @@ def self.trace_timing(
 rescue
   # Diagnostic tracing must never interfere with REPL command execution.
 end
-

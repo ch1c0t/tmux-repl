@@ -11,7 +11,7 @@ def run : Nil
     update_startup_stage("declaring event stream")
     queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
     event_queue = queue
-    view = OutputView.new
+    view = View.new
     shutdown = Channel(Nil).new(1)
 
     Process.on_terminate do |_reason|
@@ -22,7 +22,7 @@ def run : Nil
     consumer_tag = queue.subscribe(
       no_ack: false,
       block: false,
-      args: {"x-stream-offset": "next"}
+      args: AMQ::Protocol::Table.new({"x-stream-offset" => "next"} of String => AMQ::Protocol::Field)
     ) do |message|
       handle_message(message, view)
     end

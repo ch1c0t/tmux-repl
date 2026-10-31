@@ -1,4 +1,4 @@
-require "../tmux_repl"
+require "../output"
 
 if ARGV[0]? == "--log"
   unless path = ARGV[1]?
@@ -13,4 +13,4 @@ unless session_name = ARGV[0]?
   exit 2
 end
 
-TmuxREPL::OutputProcess.new(session_name).run
+Output::Runner.new(session_name).run

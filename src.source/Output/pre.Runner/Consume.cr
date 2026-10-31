@@ -1,6 +1,6 @@
 private def handle_message(
   message : AMQP::Client::DeliverMessage,
-  view : OutputView
+  view : View
 ) : Nil
   begin
     data = JSON.parse(message.body_io.to_s)

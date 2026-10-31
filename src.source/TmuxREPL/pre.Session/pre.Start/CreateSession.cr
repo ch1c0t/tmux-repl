@@ -11,11 +11,17 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
 
     created = if @command
       File.write(File.join(dir, "output.log"), "")
-      server.new_session(name: @name, detached: true)
+      server.new_session(
+        name: @name,
+        detached: true,
+        start_directory: @start_directory,
+        environment: @environment
+      )
     else
       server.new_session(
         name: @name,
         detached: true,
+        start_directory: @start_directory,
         command: [input_executable, "--input", @name],
         environment: amqp_environment
       )
@@ -23,7 +29,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
     session = created
 
     unless @command
-      wait_for_ready(File.join(dir, "input.pid"), "tmux.repl.input")
+      wait_for_ready(File.join(dir, "input.pid"), input_executable)
       File.write(File.join(dir, "worker.startup"), "launching #{worker_executable}")
       worker_process = Process.new(
         worker_executable,
@@ -32,13 +38,13 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
         output: Process::Redirect::Close,
         error: Process::Redirect::Close
       )
-      wait_for_ready(File.join(dir, "worker.pid"), "tmux.repl.worker")
+      wait_for_ready(File.join(dir, "worker.pid"), worker_executable)
     end
 
     configure_session(created)
 
     unless @command
-      wait_for_ready(File.join(dir, "output.pid"), "tmux.repl.output")
+      wait_for_ready(File.join(dir, "output.pid"), output_executable)
     end
 
     activate(created) if focus

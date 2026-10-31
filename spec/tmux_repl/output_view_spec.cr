@@ -1,8 +1,8 @@
-require "../../src/tmux_repl"
+require "../../src/output"
 
-describe TmuxREPL::OutputView do
+describe Output::View do
   it "shows an empty view before any input is submitted" do
-    view = TmuxREPL::OutputView.new
+    view = Output::View.new
     output = IO::Memory.new
 
     view.render(output)
@@ -11,7 +11,7 @@ describe TmuxREPL::OutputView do
   end
 
   it "shows the newest input while it is running" do
-    view = TmuxREPL::OutputView.new
+    view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"echo hello"})))
     output = IO::Memory.new
 
@@ -23,7 +23,7 @@ describe TmuxREPL::OutputView do
   end
 
   it "accumulates output chunks and displays the completion status" do
-    view = TmuxREPL::OutputView.new
+    view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"printf hello"})))
     view.update(JSON.parse(%({"type":"output","sequence":1,"chunk":"hel"})))
     view.update(JSON.parse(%({"type":"output","sequence":1,"chunk":"lo"})))
@@ -38,7 +38,7 @@ describe TmuxREPL::OutputView do
   end
 
   it "shows the selected input and ignores selection of an unknown input" do
-    view = TmuxREPL::OutputView.new
+    view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"first"})))
     view.update(JSON.parse(%({"type":"input","sequence":2,"command":"second"})))
     view.update(JSON.parse(%({"type":"select","sequence":1})))

@@ -1,8 +1,8 @@
-require "../../src/tmux_repl"
+require "../../src/input"
 
-describe TmuxREPL::InputHistory do
+describe Input::History do
   it "assigns increasing sequence numbers and selects the newest input" do
-    history = TmuxREPL::InputHistory.new
+    history = Input::History.new
 
     first = history.add("first")
     second = history.add("second")
@@ -14,7 +14,7 @@ describe TmuxREPL::InputHistory do
   end
 
   it "selects only inputs that exist in its history" do
-    history = TmuxREPL::InputHistory.new
+    history = Input::History.new
     history.add("first")
 
     history.select(1_u64).should be_true
@@ -23,7 +23,7 @@ describe TmuxREPL::InputHistory do
   end
 
   it "finds adjacent inputs without moving beyond either end" do
-    history = TmuxREPL::InputHistory.new
+    history = Input::History.new
     history.add("first")
     history.add("second")
     history.add("third")
