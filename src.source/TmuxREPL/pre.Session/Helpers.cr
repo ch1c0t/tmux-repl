@@ -16,18 +16,19 @@ private def state_dir : String
   File.join(base, "tmux-repl", @name)
 end
 
-# These companion programs are installed as separate executables and resolved
-# by the operating system through PATH, not relative to the calling program.
+# Prefer companions built or installed beside this CLI executable. When the
+# library is hosted by another program, fall back to the executable name so
+# the caller's PATH remains authoritative; never guess from the caller's CWD.
 private def input_executable : String
-  "tmux.repl.input"
+  CompanionExecutable.resolve("tmux.repl.input", PROGRAM_NAME)
 end
 
 private def output_executable : String
-  "tmux.repl.output"
+  CompanionExecutable.resolve("tmux.repl.output", PROGRAM_NAME)
 end
 
 private def worker_executable : String
-  "tmux.repl.worker"
+  CompanionExecutable.resolve("tmux.repl.worker", PROGRAM_NAME)
 end
 
 private def shell_quote(value : String) : String

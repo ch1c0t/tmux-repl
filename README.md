@@ -18,10 +18,11 @@ Build all four executables with:
 
     shards build
 
-Install tmux.repl.input, tmux.repl.output, and tmux.repl.worker somewhere
-on $PATH. The library deliberately resolves these companion programs by
-their executable names, not relative to the application that requires
-tmux_repl.
+When launched from a directory containing the companion executables (for
+example, `./bin/tmux.repl`), the CLI uses the matching executables beside
+itself. Otherwise, it resolves the companion executable names through $PATH.
+For library use, install tmux.repl.input, tmux.repl.output, and
+tmux.repl.worker somewhere on $PATH.
 
 Start a REPL session with tmux.repl start [SESSION]; stop it with
 tmux.repl stop [SESSION].
