@@ -15,7 +15,7 @@ module LavinMQProcess
       expect_input("#1: printf", "* #2: printf")
 
       input_pane.send_keys(":help", literal: true)
-      expect_input(":select ID", ":prev", ":next", ":list")
+      expect_input(":select ID", ":prev", ":next", ":list", "Ctrl+G")
 
       input_pane.send_keys(":select 1", literal: true)
       expect_output("INPUT #1", "FIRST_REPL_OUTPUT", "[exit status: 0]")
