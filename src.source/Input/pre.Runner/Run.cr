@@ -15,7 +15,7 @@ def run : Nil
     reader = Reader.new(input_pid_path)
     File.delete(startup_stage_path) if File.exists?(startup_stage_path)
 
-    history = History.new
+    history = TmuxREPL::InputHistory.new
     reader.read_loop do |expression|
       next if expression.strip.empty?
       next if handle_control(expression.strip, events, history)

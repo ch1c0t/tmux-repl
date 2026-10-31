@@ -2,7 +2,7 @@
 private def handle_control(
   control : String,
   events : AMQP::Client::Queue,
-  history : History
+  history : TmuxREPL::InputHistory
 ) : Bool
   if match = control.match(/\A:select\s+([0-9]+)\z/)
     target = match[1].to_u64
@@ -57,7 +57,7 @@ end
 private def select_input(
   sequence : UInt64,
   events : AMQP::Client::Queue,
-  history : History
+  history : TmuxREPL::InputHistory
 ) : Nil
   TmuxREPL.publish_event(events, "select", @session_name, sequence)
   history.select(sequence)
