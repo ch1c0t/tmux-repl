@@ -32,7 +32,6 @@ module TmuxREPL
     def self.state_paths(session_name : String) : StatePaths
       base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
       state_dir = File.join(base, "tmux-repl", session_name)
-
       StatePaths.new(
         File.join(state_dir, "worker.pid"),
         File.join(state_dir, "worker.error"),
@@ -41,10 +40,9 @@ module TmuxREPL
     end
 
     class Runner
-      @shutdown = Channel(Nil).new(1)
-      @session = PTY::Session.new(:sh)
-
       def initialize(@session_name : String, @tmux_session_id : String, @paths : StatePaths)
+        @shutdown = Channel(Nil).new(1)
+        @session = PTY::Session.new(:sh)
       end
 
       def run
@@ -55,8 +53,9 @@ module TmuxREPL
           commands, events = connect
           start_pty
           subscribe(commands, events)
+          server = tmux_server
           advertise_ready
-          wait_for_tmux_session
+          wait_for_tmux_session(server)
         rescue ex
           report_startup_error(ex)
           exit 1
@@ -85,7 +84,6 @@ module TmuxREPL
 
         write_startup_stage("declaring event stream")
         events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
-
         {commands, events}
       end
 
@@ -123,10 +121,9 @@ module TmuxREPL
           @session_name, "worker", "command_received",
           details: "sequence=#{sequence} command_bytes=#{command.bytesize}"
         )
-
         publish_started(events, sequence, command)
-        run_command(events, sequence, command)
-        publish_complete(events, sequence, command, received_at)
+        result = run_command(events, sequence, command)
+        publish_complete(events, sequence, command, result.status, received_at)
       end
 
       private def publish_started(events, sequence, command)
@@ -148,27 +145,23 @@ module TmuxREPL
         result = @session.run(command) do |chunk|
           output_chunks += 1
           output_bytes += chunk.bytesize
-          output_publish_ms += publish_output(events, sequence, chunk) if trace_timing
-          TmuxREPL.publish_event(events, "output", @session_name, sequence, chunk: chunk) unless trace_timing
+          publish_started_at = Time.instant if trace_timing
+          TmuxREPL.publish_event(events, "output", @session_name, sequence, chunk: chunk)
+          if started_at = publish_started_at
+            output_publish_ms += (Time.instant - started_at).total_milliseconds
+          end
         end
 
         TmuxREPL.trace_timing(
           @session_name, "worker", "pty_run_finished", run_started_at,
           "sequence=#{sequence} status=#{result.status} output_chunks=#{output_chunks} output_bytes=#{output_bytes} output_publish_ms=#{output_publish_ms.round(2)}"
         )
-
         result
       end
 
-      private def publish_output(events, sequence, chunk)
-        started_at = Time.instant
-        TmuxREPL.publish_event(events, "output", @session_name, sequence, chunk: chunk)
-        (Time.instant - started_at).total_milliseconds
-      end
-
-      private def publish_complete(events, sequence, command, received_at)
+      private def publish_complete(events, sequence, command, status, received_at)
         completed_at = Time.instant
-        TmuxREPL.publish_event(events, "complete", @session_name, sequence, command: command, status: @last_status)
+        TmuxREPL.publish_event(events, "complete", @session_name, sequence, command: command, status: status)
         TmuxREPL.trace_timing(
           @session_name, "worker", "complete_event_confirmed", completed_at,
           "sequence=#{sequence}"
@@ -180,14 +173,11 @@ module TmuxREPL
       end
 
       private def advertise_ready
-        tmux_server
         File.write(@paths.ready, Process.pid.to_s)
         File.delete(@paths.startup_stage) if File.exists?(@paths.startup_stage)
       end
 
-      private def wait_for_tmux_session
-        server = tmux_server
-
+      private def wait_for_tmux_session(server)
         # The worker belongs to the tmux session, not to a pane or client.
         # Detaching therefore leaves the worker running.
         loop do
