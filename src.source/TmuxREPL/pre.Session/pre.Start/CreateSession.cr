@@ -6,7 +6,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
   begin
     FileUtils.mkdir_p(dir)
     unless @command
-      File.write(File.join(dir, "input.startup"), "launching #{input_executable}")
+      File.write(File.join(dir, "input.startup"), "launching #{resolved_input_executable}")
     end
 
     created = if @command
@@ -22,29 +22,29 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
         name: @name,
         detached: true,
         start_directory: @start_directory,
-        command: [input_executable, "--input", @name],
+        command: [resolved_input_executable, "--input", @name],
         environment: amqp_environment
       )
     end
     session = created
 
     unless @command
-      wait_for_ready(File.join(dir, "input.pid"), input_executable)
-      File.write(File.join(dir, "worker.startup"), "launching #{worker_executable}")
+      wait_for_ready(File.join(dir, "input.pid"), resolved_input_executable)
+      File.write(File.join(dir, "worker.startup"), "launching #{resolved_worker_executable}")
       worker_process = Process.new(
-        worker_executable,
+        resolved_worker_executable,
         ["--worker", @name, created.session_id],
         input: Process::Redirect::Close,
         output: Process::Redirect::Close,
         error: Process::Redirect::Close
       )
-      wait_for_ready(File.join(dir, "worker.pid"), worker_executable)
+      wait_for_ready(File.join(dir, "worker.pid"), resolved_worker_executable)
     end
 
     configure_session(created)
 
     unless @command
-      wait_for_ready(File.join(dir, "output.pid"), output_executable)
+      wait_for_ready(File.join(dir, "output.pid"), resolved_output_executable)
     end
 
     activate(created) if focus
@@ -97,15 +97,15 @@ private def configure_session(session : Tmux::Session) : Nil
     input_pane.split(
       :right,
       detached: true,
-      command: [output_executable, "--log", log]
+      command: [resolved_output_executable, "--log", log]
     )
     input_pane.send_keys(input_command, literal: true)
   else
-    File.write(File.join(state_dir, "output.startup"), "launching #{output_executable}")
+    File.write(File.join(state_dir, "output.startup"), "launching #{resolved_output_executable}")
     input_pane.split(
       :right,
       detached: true,
-      command: [output_executable, @name]
+      command: [resolved_output_executable, @name]
     )
   end
 

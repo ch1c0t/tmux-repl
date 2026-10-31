@@ -17,6 +17,19 @@ describe TmuxREPL::Definition do
     session.start_directory.should eq("/tmp")
   end
 
+  it "configures companion executable overrides through the DSL" do
+    session = TmuxREPL.define("custom") do |repl|
+      repl.executables(
+        input: "/opt/custom/tmux.repl.input",
+        worker: "/opt/custom/tmux.repl.worker"
+      )
+    end.session
+
+    session.input_executable.should eq("/opt/custom/tmux.repl.input")
+    session.output_executable.should be_nil
+    session.worker_executable.should eq("/opt/custom/tmux.repl.worker")
+  end
+
   it "uses the standard shell worker when no native command is configured" do
     session = TmuxREPL.define("shell") { |_repl| }.session
 

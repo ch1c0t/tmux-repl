@@ -18,11 +18,30 @@ Build all four executables with:
 
     shards build
 
-When launched from a directory containing the companion executables (for
-example, `./bin/tmux.repl`), the CLI uses the matching executables beside
-itself. Otherwise, it resolves the companion executable names through $PATH.
-For library use, install tmux.repl.input, tmux.repl.output, and
-tmux.repl.worker somewhere on $PATH.
+By default, the CLI prefers the companion executables beside the running
+`tmux.repl` binary, then searches the invoking process's $PATH. Each companion
+can be overridden independently. An override may be an executable path or a
+command name found on $PATH.
+
+For shell/CLI use, set any of:
+
+    TMUX_REPL_INPUT_EXECUTABLE=/opt/tmux-repl/tmux.repl.input
+    TMUX_REPL_OUTPUT_EXECUTABLE=/opt/tmux-repl/tmux.repl.output
+    TMUX_REPL_WORKER_EXECUTABLE=/opt/tmux-repl/tmux.repl.worker
+
+For library use, configure overrides on the DSL or Session:
+
+    TmuxREPL.define("custom-shell") do |repl|
+      repl.executables(
+        input: "/opt/tmux-repl/tmux.repl.input",
+        output: "/opt/tmux-repl/tmux.repl.output",
+        worker: "/opt/tmux-repl/tmux.repl.worker"
+      )
+    end.start
+
+An explicit DSL/Session override takes precedence over the corresponding
+environment variable; environment variables take precedence over sibling and
+$PATH discovery.
 
 Start a REPL session with tmux.repl start [SESSION]; stop it with
 tmux.repl stop [SESSION].
