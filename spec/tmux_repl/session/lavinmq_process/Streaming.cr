@@ -16,11 +16,16 @@ module LavinMQProcess
       expect_output_without("END_MARK_")
 
       # Ctrl+G from Input toggles to raw; the same key in Output toggles back.
-      input_pane.send_keys("C-g")
+      toggle_view_from(input_pane)
       expect_output("START_MARK_", "END_MARK_", timeout: 2.seconds)
 
-      output_pane.send_keys("C-g")
+      toggle_view_from(output_pane)
       expect_stripped_output
+    end
+
+    private def toggle_view_from(pane : Tmux::Pane) : Nil
+      # This is a standalone key press, not a submitted line.
+      pane.send_keys("C-g", enter: false)
     end
 
     private def expect_stripped_output : Nil
