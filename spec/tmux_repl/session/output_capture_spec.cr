@@ -8,7 +8,8 @@ describe TmuxREPL::Session do
     previous_state_home = ENV["XDG_STATE_HOME"]?
     session = TmuxREPL::Session.new(
       name,
-      command: ["sh", "-c", "printf '%s%s' 'TMUX_REPL_' 'LIBRARY_E2E'; sleep 1"]
+      command: ["sh", "-c", "printf '%s%s' 'TMUX_REPL_' 'LIBRARY_E2E'; sleep 1"],
+      output_executable: File.expand_path("bin/tmux.repl.output")
     )
 
     begin
