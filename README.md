@@ -55,6 +55,11 @@ ID. Use these controls in the left pane to select which input is shown on the ri
     :next       Select the next input
     :help       Show these controls
 
+The output pane streams the raw PTY transcript while a command is running, then
+switches automatically to the stripped command output when its exit status is
+available. Focus the output pane and press `v` to toggle between stripped and
+raw transcript views. The selected view remains active until toggled again.
+
 ## Tmux REPL library and DSL
 
 Require tmux_repl to define a named REPL from Crystal code. The block configures

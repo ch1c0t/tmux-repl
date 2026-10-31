@@ -21,7 +21,7 @@ private def lavinmq_diagnostics(
 end
 
 describe "LavinMQ-backed REPL processes" do
-  it "shows only the output associated with the selected input" do
+  it "streams raw output, switches to the stripped result, and toggles back" do
     name = "repl_lavinmq_spec_#{Process.pid}"
     state_home = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-repl-lavinmq-#{Process.pid}")
     state_dir = File.join(state_home, "tmux-repl", name)
@@ -141,6 +141,52 @@ describe "LavinMQ-backed REPL processes" do
         25.milliseconds
       ).should be_true
       pane_text(output_pane).should_not contain("SECOND_REPL_OUTPUT")
+
+      input_pane.send_keys(
+        %(for i in $(seq 1 4); do echo "Streaming Tick $i..." && sleep 0.2; done),
+        literal: true
+      )
+      pane_shows?(
+        output_pane,
+        ["Streaming Tick 1...", "START_MARK_"],
+        3.seconds,
+        25.milliseconds
+      ).should be_true
+
+      raw_while_running = pane_text(output_pane)
+      raw_while_running.should contain("END_MARK_")
+      raw_while_running.should contain("Streaming Tick 1...")
+
+      pane_shows?(
+        output_pane,
+        ["Streaming Tick 4...", "[exit status: 0]"],
+        5.seconds,
+        25.milliseconds
+      ).should be_true
+
+      stripped_after_completion = pane_text(output_pane)
+      stripped_after_completion.should_not contain("START_MARK_")
+      stripped_after_completion.should_not contain("END_MARK_")
+      stripped_after_completion.should contain("Streaming Tick 1...")
+      stripped_after_completion.should contain("Streaming Tick 4...")
+
+      output_pane.send_keys("v", literal: true)
+      pane_shows?(
+        output_pane,
+        ["START_MARK_", "END_MARK_"],
+        2.seconds,
+        25.milliseconds
+      ).should be_true
+
+      output_pane.send_keys("v", literal: true)
+      pane_shows?(
+        output_pane,
+        ["Streaming Tick 4...", "[exit status: 0]"],
+        2.seconds,
+        25.milliseconds
+      ).should be_true
+      pane_text(output_pane).should_not contain("START_MARK_")
+      pane_text(output_pane).should_not contain("END_MARK_")
 
       # Killing the tmux session directly must also stop the independent worker.
       tmux_session.kill

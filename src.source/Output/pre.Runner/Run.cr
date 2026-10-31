@@ -3,6 +3,7 @@ def run : Nil
   prepare_startup
   event_queue : AMQP::Client::Queue? = nil
   consumer_tag : String? = nil
+  terminal_mode = TerminalMode.new
 
   begin
     channel = Global.amqp_channel
@@ -28,12 +29,14 @@ def run : Nil
     end
 
     view.render
+    watch_keyboard(view, terminal_mode)
     mark_ready
     shutdown.receive
   rescue ex
     report_startup_failure(ex)
     exit 1
   ensure
+    terminal_mode.restore
     unsubscribe(event_queue, consumer_tag)
     cleanup_readiness
   end

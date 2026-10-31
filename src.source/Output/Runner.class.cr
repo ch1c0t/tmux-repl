@@ -5,4 +5,5 @@ end
 
 include Helpers
 include Consume
+include Keyboard
 include Run

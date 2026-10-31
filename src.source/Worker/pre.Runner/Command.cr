@@ -10,7 +10,7 @@ private def process_message(data : JSON::Any, events) : Nil
 
   publish_started(events, sequence, command)
   result = run_command(events, sequence, command)
-  publish_complete(events, sequence, command, result.status, received_at)
+  publish_complete(events, sequence, command, result, received_at)
 end
 
 private def publish_started(events, sequence, command) : Nil
@@ -53,9 +53,17 @@ private def publish_output(events, sequence, chunk) : Float64
   (Time.instant - started_at).total_milliseconds
 end
 
-private def publish_complete(events, sequence, command, status, received_at) : Nil
+private def publish_complete(events, sequence, command, result : PTY::ExecutionResult, received_at) : Nil
   completed_at = Time.instant
-  TmuxREPL.publish_event(events, "complete", @session_name, sequence, command: command, status: status)
+  TmuxREPL.publish_event(
+    events,
+    "complete",
+    @session_name,
+    sequence,
+    command: command,
+    status: result.status,
+    clean_output: result.output
+  )
   TmuxREPL.trace_timing(
     @session_name, "worker", "complete_event_confirmed", completed_at,
     "sequence=#{sequence}"
