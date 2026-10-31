@@ -3,10 +3,7 @@ require "../tmux_repl"
 
 module TmuxREPL
   module Worker
-    record StatePaths,
-      ready: String,
-      startup_error: String,
-      startup_stage: String
+    record StatePaths, ready : String, startup_error : String, startup_stage : String
 
     def self.arguments(args : Array(String)) : Tuple(String, String)
       unless args[0]? == "--worker"
