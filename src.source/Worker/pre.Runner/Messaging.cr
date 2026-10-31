@@ -28,4 +28,5 @@ private def subscribe(commands, events) : Nil
       end
     end
   end
+  nil
 end
