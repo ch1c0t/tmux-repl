@@ -17,6 +17,8 @@ def update(event : JSON::Any) : Nil
       if clean_output = event.as_h["clean_output"]?
         @clean_outputs[sequence] = clean_output.as_s
       end
+    when "toggle_view"
+      @raw_view = !@raw_view
     end
   end
 end

@@ -26,7 +26,7 @@ def render(io : IO = STDOUT) : Nil
       "STREAMING"
     end
 
-    io.puts "INPUT ##{selected} [#{mode_label}; v toggles view]"
+    io.puts "INPUT ##{selected} [#{mode_label}; Ctrl+G toggles view]"
     io.puts command
     io.puts "─" * 40
 

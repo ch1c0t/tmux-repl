@@ -43,7 +43,7 @@ describe Output::View do
     stripped.to_s.should contain("[exit status: 0]")
   end
 
-  it "toggles between stripped and raw views for completed commands" do
+  it "handles a view-toggle event published by the input pane" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run task"})))
     view.update(JSON.parse({"type" => "output", "sequence" => 1, "chunk" => "START_MARK_1\nclean data\nEND_MARK_1__0__"}.to_json))
@@ -54,13 +54,13 @@ describe Output::View do
     stripped.to_s.should contain("clean data")
     stripped.to_s.should_not contain("START_MARK_1")
 
-    view.toggle_view.should be_true
+    view.update(JSON.parse(%({"type":"toggle_view","sequence":0})))
     raw = IO::Memory.new
     view.render(raw)
     raw.to_s.should contain("START_MARK_1")
     raw.to_s.should contain("END_MARK_1")
 
-    view.toggle_view.should be_false
+    view.update(JSON.parse(%({"type":"toggle_view","sequence":0})))
     stripped_again = IO::Memory.new
     view.render(stripped_again)
     stripped_again.to_s.should contain("clean data")

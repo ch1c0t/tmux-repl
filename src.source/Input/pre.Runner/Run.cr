@@ -12,7 +12,7 @@ def run : Nil
     events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
 
     update_startup_stage("initializing Reply reader")
-    reader = Reader.new(input_pid_path)
+    reader = Reader.new(input_pid_path, @session_name, events)
     File.delete(startup_stage_path) if File.exists?(startup_stage_path)
 
     history = TmuxREPL::InputHistory.new

@@ -4,7 +4,7 @@ private def watch_keyboard(view : View, terminal_mode : TerminalMode) : Nil
   spawn do
     begin
       while key = STDIN.read_char
-        next unless key == 'v' || key == 'V'
+        next unless key == '\u0007'
 
         view.toggle_view
         view.render

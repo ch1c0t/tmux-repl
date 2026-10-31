@@ -170,7 +170,8 @@ describe "LavinMQ-backed REPL processes" do
       stripped_after_completion.should contain("Streaming Tick 1...")
       stripped_after_completion.should contain("Streaming Tick 4...")
 
-      output_pane.send_keys("v", literal: true)
+      # The same Ctrl+G shortcut works from the input pane.
+      input_pane.send_keys("C-g")
       pane_shows?(
         output_pane,
         ["START_MARK_", "END_MARK_"],
@@ -178,7 +179,8 @@ describe "LavinMQ-backed REPL processes" do
         25.milliseconds
       ).should be_true
 
-      output_pane.send_keys("v", literal: true)
+      # It also works from the output pane, toggling back to the stripped view.
+      output_pane.send_keys("C-g")
       pane_shows?(
         output_pane,
         ["Streaming Tick 4...", "[exit status: 0]"],
