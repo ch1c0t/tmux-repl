@@ -95,3 +95,4 @@ def self.trace_timing(
 rescue
   # Diagnostic tracing must never interfere with REPL command execution.
 end
+

@@ -1,6 +1,7 @@
 require "reply"
 require "../tmux_repl"
 
+
 class TmuxREPLInputReader < Reply::Reader
   @ready_path : String
 
@@ -24,129 +25,6 @@ unless session_name = ARGV[1]?
   exit 2
 end
 
-base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-state_dir = File.join(base, "tmux-repl", session_name)
-input_pid_path = File.join(state_dir, "input.pid")
-startup_error_path = File.join(state_dir, "input.error")
-startup_stage_path = File.join(state_dir, "input.startup")
-File.delete(startup_error_path) if File.exists?(startup_error_path)
-File.write(startup_stage_path, "connecting to LavinMQ")
-
-begin
-  channel = Global.amqp_channel
-  File.write(startup_stage_path, "declaring command stream")
-  commands = TmuxREPL.stream_queue(channel, TmuxREPL.commands_queue_name(session_name))
-  File.write(startup_stage_path, "declaring event stream")
-  events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(session_name))
-  File.write(startup_stage_path, "initializing Reply reader")
-  reader = TmuxREPLInputReader.new(input_pid_path)
-  File.delete(startup_stage_path) if File.exists?(startup_stage_path)
-  sequence = 0_u64
-  selected_sequence : UInt64? = nil
-  history = [] of Tuple(UInt64, String)
-
-  reader.read_loop do |expression|
-    next if expression.strip.empty?
-    control = expression.strip
-
-    if match = control.match(/\A:select\s+([0-9]+)\z/)
-      target = match[1].to_u64
-      if history.any? { |entry| entry[0] == target }
-        TmuxREPL.publish_event(events, "select", session_name, target)
-        selected_sequence = target
-        puts "Selected input ##{target}."
-      else
-        puts "No input ##{target}. Use :list to see submitted inputs."
-      end
-      next
-    end
-
-    case control
-    when ":prev"
-      if current = selected_sequence
-        index = history.index { |entry| entry[0] == current }
-        if index && index > 0
-          target = history[index - 1][0]
-          TmuxREPL.publish_event(events, "select", session_name, target)
-          selected_sequence = target
-          puts "Selected input ##{target}."
-        else
-          puts "Already at the oldest input."
-        end
-      else
-        puts "No inputs have been submitted."
-      end
-      next
-    when ":next"
-      if current = selected_sequence
-        index = history.index { |entry| entry[0] == current }
-        if index && index < history.size - 1
-          target = history[index + 1][0]
-          TmuxREPL.publish_event(events, "select", session_name, target)
-          selected_sequence = target
-          puts "Selected input ##{target}."
-        else
-          puts "Already at the newest input."
-        end
-      else
-        puts "No inputs have been submitted."
-      end
-      next
-    when ":list"
-      if history.empty?
-        puts "No inputs have been submitted."
-      else
-        history.each do |entry|
-          marker = entry[0] == selected_sequence ? "*" : " "
-          puts "#{marker} ##{entry[0]}: #{entry[1].lines.first? || entry[1]}"
-        end
-      end
-      next
-    when ":help"
-      puts ":select ID  Show the output for a previously submitted input."
-      puts ":prev       Select the previous input."
-      puts ":next       Select the next input."
-      puts ":list       List submitted inputs."
-      next
-    end
-
-    sequence &+= 1_u64
-    history << {sequence, expression}
-    selected_sequence = sequence
-    command_received_at = Time.instant
-    TmuxREPL.trace_timing(
-      session_name, "input", "command_received",
-      details: "sequence=#{sequence} command_bytes=#{expression.bytesize}"
-    )
-
-    input_event_started_at = Time.instant if TmuxREPL.trace_timing_enabled?
-    TmuxREPL.publish_event(events, "input", session_name, sequence, command: expression)
-    if publish_started = input_event_started_at
-      TmuxREPL.trace_timing(
-        session_name, "input", "input_event_confirmed", publish_started,
-        "sequence=#{sequence}"
-      )
-    end
-
-    command_publish_started_at = Time.instant if TmuxREPL.trace_timing_enabled?
-    TmuxREPL.publish_command(commands, session_name, sequence, expression)
-    if publish_started = command_publish_started_at
-      TmuxREPL.trace_timing(
-        session_name, "input", "command_publish_confirmed", publish_started,
-        "sequence=#{sequence}"
-      )
-    end
-
-    TmuxREPL.trace_timing(
-      session_name, "input", "submission_published", command_received_at,
-      "sequence=#{sequence}"
-    )
-    puts "[input ##{sequence}] submitted. Use :select ID, :prev, :next, :list, or :help."
-  end
-rescue ex
-  File.write(startup_error_path, "#{ex.class}: #{ex.message}")
-  STDERR.puts "tmux.repl.input: #{ex.class}: #{ex.message}"
-  exit 1
-ensure
-  File.delete(input_pid_path) if File.exists?(input_pid_path)
+TmuxREPL::InputProcess.new(session_name).run do |ready_path|
+  TmuxREPLInputReader.new(ready_path)
 end
