@@ -5,8 +5,21 @@ module Input
   class Reader < Reply::Reader
     @ready_path : String
   
-    def initialize(@ready_path : String)
+    def initialize(
+      @ready_path : String,
+      @session_name : String,
+      @events : AMQP::Client::Queue
+    )
       super()
+    end
+  
+    # Ctrl+G is shared with the output pane and never enters the command buffer.
+    private def on_char(char : Char) : Nil
+      if char == '\u0007'
+        TmuxREPL.publish_event(@events, "toggle_view", @session_name, 0_u64)
+      else
+        super
+      end
     end
   
     def prompt(io : IO, line_number : Int32, color : Bool)
@@ -67,6 +80,7 @@ module Input
           puts ":prev       Select the previous input."
           puts ":next       Select the next input."
           puts ":list       List submitted inputs."
+          puts "Ctrl+G      Toggle stripped/raw output from either pane."
           true
         else
           false
@@ -136,7 +150,7 @@ module Input
           events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
       
           update_startup_stage("initializing Reply reader")
-          reader = Reader.new(input_pid_path)
+          reader = Reader.new(input_pid_path, @session_name, events)
           File.delete(startup_stage_path) if File.exists?(startup_stage_path)
       
           history = TmuxREPL::InputHistory.new

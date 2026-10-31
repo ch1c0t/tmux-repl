@@ -120,7 +120,7 @@ module LavinMQProcess
         "Output pane contents:\n#{actual}"
       )
     rescue ex
-      raise if ex.message.to_s.includes?("scenario: #{name}")
+      raise ex if ex.message.to_s.includes?("scenario: #{name}")
 
       fail_with_diagnostics(
         "Could not verify that the output pane excludes #{marker.inspect}: " \

@@ -1,4 +1,5 @@
 require "json"
+require "sync/mutex"
 require "./tmux_repl"
 
 module Output
@@ -98,12 +99,34 @@ module Output
       end
     end
   
+    module Keyboard
+      private def watch_keyboard(view : View, terminal_mode : TerminalMode) : Nil
+        return unless terminal_mode.enable
+      
+        spawn do
+          begin
+            while key = STDIN.read_char
+              next unless key == '\u0007'
+      
+              view.toggle_view
+              view.render
+            end
+          rescue IO::Error
+            # The pane may close while the keyboard reader is waiting.
+          ensure
+            terminal_mode.restore
+          end
+        end
+      end
+    end
+  
     module Run
       # Connect to the event stream, render its events, and stay alive with the tmux session.
       def run : Nil
         prepare_startup
         event_queue : AMQP::Client::Queue? = nil
         consumer_tag : String? = nil
+        terminal_mode = TerminalMode.new
       
         begin
           channel = Global.amqp_channel
@@ -129,12 +152,14 @@ module Output
           end
       
           view.render
+          watch_keyboard(view, terminal_mode)
           mark_ready
           shutdown.receive
         rescue ex
           report_startup_failure(ex)
           exit 1
         ensure
+          terminal_mode.restore
           unsubscribe(event_queue, consumer_tag)
           cleanup_readiness
         end
@@ -148,74 +173,165 @@ module Output
     
     include Helpers
     include Consume
+    include Keyboard
     include Run
+  end
+
+  class TerminalMode
+    @saved_state : String?
+    
+    def enable : Bool
+      return false unless STDIN.tty?
+    
+      state = IO::Memory.new
+      status = Process.run(
+        "stty",
+        ["-g"],
+        input: STDIN,
+        output: state,
+        error: Process::Redirect::Close
+      )
+      return false unless status.success?
+    
+      saved_state = state.to_s.strip
+      return false if saved_state.empty?
+      @saved_state = saved_state
+    
+      status = Process.run(
+        "stty",
+        ["-echo", "-icanon", "min", "1", "time", "0"],
+        input: STDIN,
+        output: Process::Redirect::Close,
+        error: Process::Redirect::Close
+      )
+      unless status.success?
+        restore
+        return false
+      end
+    
+      true
+    rescue
+      restore
+      false
+    end
+    
+    def restore : Nil
+      state = @saved_state
+      @saved_state = nil
+      return unless state
+    
+      Process.run(
+        "stty",
+        [state],
+        input: STDIN,
+        output: Process::Redirect::Close,
+        error: Process::Redirect::Close
+      )
+      nil
+    rescue
+      nil
+    end
   end
 
   class View
     module Render
-      # Draw the currently selected input and its output.
+      # Draw the selected command, streaming transcript, or completed output.
       def render(io : IO = STDOUT) : Nil
-        io.print "\e[H\e[2J"
-        io.flush
-      
-        unless selected = @selected_sequence
-          io.puts "No inputs yet."
+        @mutex.synchronize do
+          io.print "\e[H\e[2J"
           io.flush
-          return
-        end
       
-        command = @inputs[selected]?
-        unless command
-          io.puts "Waiting for input ##{selected}..."
+          unless selected = @selected_sequence
+            io.puts "No inputs yet."
+            io.flush
+            next
+          end
+      
+          command = @inputs[selected]?
+          unless command
+            io.puts "Waiting for input ##{selected}..."
+            io.flush
+            next
+          end
+      
+          completed = @statuses.has_key?(selected)
+          clean_output = @clean_outputs[selected]?
+          show_raw = !completed || @raw_view || clean_output.nil?
+          mode_label = if completed
+            show_raw ? "RAW" : "STRIPPED"
+          else
+            "STREAMING"
+          end
+      
+          io.puts "INPUT ##{selected} [#{mode_label}; Ctrl+G toggles view]"
+          io.puts command
+          io.puts "─" * 40
+      
+          displayed_output = if show_raw
+            @outputs[selected]?
+          else
+            clean_output
+          end
+      
+          if output = displayed_output
+            io.print output
+            io.puts unless output.ends_with?("\n") || output.empty?
+          elsif !completed
+            io.puts "(running...)"
+          end
+      
+          if status = @statuses[selected]?
+            io.puts "[exit status: #{status}]"
+          end
           io.flush
-          return
         end
-      
-        io.puts "INPUT ##{selected}"
-        io.puts command
-        io.puts "─" * 40
-      
-        if output = @outputs[selected]?
-          io.print output
-          io.puts unless output.ends_with?("\n") || output.empty?
-        else
-          io.puts "(running...)"
-        end
-      
-        if status = @statuses[selected]?
-          io.puts "[exit status: #{status}]"
-        end
-        io.flush
       end
     end
   
     module Update
       # Apply one event from the session event stream to the displayed view.
       def update(event : JSON::Any) : Nil
-        sequence = event["sequence"].as_i64.to_u64
+        @mutex.synchronize do
+          sequence = event["sequence"].as_i64.to_u64
       
-        case event["type"].as_s
-        when "input"
-          @inputs[sequence] = event["command"].as_s
-          @selected_sequence = sequence
-        when "select"
-          @selected_sequence = sequence if @inputs.has_key?(sequence)
-        when "output"
-          chunk = event["chunk"].as_s
-          @outputs[sequence] = @outputs.fetch(sequence, "") + chunk
-        when "complete"
-          @statuses[sequence] = event["status"].as_i64.to_i32
+          case event["type"].as_s
+          when "input"
+            @inputs[sequence] = event["command"].as_s
+            @selected_sequence = sequence
+          when "select"
+            @selected_sequence = sequence if @inputs.has_key?(sequence)
+          when "output"
+            chunk = event["chunk"].as_s
+            @outputs[sequence] = @outputs.fetch(sequence, "") + chunk
+          when "complete"
+            @statuses[sequence] = event["status"].as_i64.to_i32
+            if clean_output = event.as_h["clean_output"]?
+              @clean_outputs[sequence] = clean_output.as_s
+            end
+          when "toggle_view"
+            @raw_view = !@raw_view
+          end
         end
       end
     end
   
     @inputs = {} of UInt64 => String
     @outputs = {} of UInt64 => String
+    @clean_outputs = {} of UInt64 => String
     @statuses = {} of UInt64 => Int32
     @selected_sequence : UInt64?
+    @raw_view = false
+    @mutex = Sync::Mutex.new
     
     def initialize
       @selected_sequence = nil
+    end
+    
+    # Switch the completed-command display between PTY transcript and extracted output.
+    def toggle_view : Bool
+      @mutex.synchronize do
+        @raw_view = !@raw_view
+      end
     end
     
     include Update

@@ -35,7 +35,8 @@ module TmuxREPL
     sequence : UInt64,
     command : String? = nil,
     chunk : String? = nil,
-    status : Int32? = nil
+    status : Int32? = nil,
+    clean_output : String? = nil
   ) : Nil
     payload = JSON.build do |json|
       json.object do
@@ -46,6 +47,7 @@ module TmuxREPL
         json.field "command", command if command
         json.field "chunk", chunk if chunk
         json.field "status", status if status
+        json.field "clean_output", clean_output if clean_output
       end
     end
     properties = AMQP::Client::Properties.new(delivery_mode: 2)
@@ -59,9 +61,10 @@ module TmuxREPL
     sequence : UInt64,
     command : String? = nil,
     chunk : String? = nil,
-    status : Int32? = nil
+    status : Int32? = nil,
+    clean_output : String? = nil
   ) : Nil
-    publish_message(queue, type, session_name, sequence, command, chunk, status)
+    publish_message(queue, type, session_name, sequence, command, chunk, status, clean_output)
   end
   
   def self.publish_command(
