@@ -95,26 +95,6 @@ include the session name, input sequence, timestamp, and command or output data.
 Set LAVINMQ_AMQP_UNIXSOCKET to the Unix socket path exposed by LavinMQ; the
 REPL uses global-amqp_channel for AMQP communication.
 
-## Crystal Tmux API
-
-The shard also exposes a top-level Tmux module with an object model inspired
-by libtmux:
-
-    require "tmux"
-
-    server = Tmux::Server.new
-    session = server.new_session("demo", detached: true)
-    window = session.active_window
-    pane = window.active_pane
-
-    pane.send_keys("echo hello")
-    sleep 0.1
-    puts pane.capture_pane.join("\n")
-
-The core API covers server, session, window, and pane traversal; creating
-sessions and windows; splitting panes; sending keys; capturing pane output;
-self-location through tmux environment variables; and raw command execution.
-
 ## Development
 
     shards install

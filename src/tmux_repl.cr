@@ -1,6 +1,6 @@
 require "file_utils"
 require "json"
-require "./tmux"
+require "tmux"
 require "global-amqp_channel"
 
 module TmuxREPL

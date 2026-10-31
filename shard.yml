@@ -22,4 +22,7 @@ dependencies:
   global-amqp_channel:
     github: ch1c0t/crystal.global-amqp_channel
     branch: main
+  tmux:
+    github: ch1c0t/crystal.tmux
+    branch: main
 crystal: ">= 1.21.0"

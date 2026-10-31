@@ -1,6 +1,6 @@
 require "spec"
 require "time"
-require "../src/tmux"
+require "tmux"
 
 # Poll a condition until it succeeds or the timeout expires.
 def wait_until(
