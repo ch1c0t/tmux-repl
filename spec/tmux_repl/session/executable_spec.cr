@@ -13,7 +13,7 @@ describe TmuxREPL::Session::CompanionExecutable do
     shadow_path = File.join(path_directory, "tmux.repl.input")
     [companion_path, shadow_path].each do |path|
       File.write(path, "#!/bin/sh\nexit 0\n")
-      File.chmod(0o755, path)
+      File.chmod(path, 0o755)
     end
 
     TmuxREPL::Session::CompanionExecutable.resolve(
@@ -32,7 +32,7 @@ describe TmuxREPL::Session::CompanionExecutable do
 
     companion_path = File.join(path_directory, "tmux.repl.input")
     File.write(companion_path, "#!/bin/sh\nexit 0\n")
-    File.chmod(0o755, companion_path)
+    File.chmod(companion_path, 0o755)
 
     TmuxREPL::Session::CompanionExecutable.resolve(
       "tmux.repl.input",
