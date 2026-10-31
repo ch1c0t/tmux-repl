@@ -1,0 +1,62 @@
+module LavinMQProcess
+  class Scenario
+    getter name : String
+
+    @state_home : String
+    @worker_pid_path : String
+    @ready_paths : Array(String)
+    @previous_environment : Hash(String, String?)
+    @server : Tmux::Server
+    @repl : TmuxREPL::Session
+    @bootstrap_started = false
+    @repl_started = false
+    @tmux_session : Tmux::Session?
+    @input_pane : Tmux::Pane?
+    @output_pane : Tmux::Pane?
+
+    def initialize
+      @name = "repl_lavinmq_spec_#{Process.pid}"
+      @state_home = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-repl-lavinmq-#{Process.pid}")
+      state_dir = File.join(@state_home, "tmux-repl", @name)
+      @worker_pid_path = File.join(state_dir, "worker.pid")
+      @ready_paths = %w[input.pid worker.pid output.pid].map { |file| File.join(state_dir, file) }
+
+      @previous_environment = {
+        "XDG_STATE_HOME" => ENV["XDG_STATE_HOME"]?,
+        "PATH"           => ENV["PATH"]?,
+        "TMUX"           => ENV["TMUX"]?,
+      }
+      @server = Tmux::Server.new(socket_path: File.join(@state_home, "tmux.sock"))
+      @repl = TmuxREPL::Session.new(@name)
+    end
+
+    def run : Nil
+      begin
+        start
+        verify_selection
+        verify_streaming_and_toggle
+        stop_worker
+      ensure
+        cleanup
+      end
+    end
+
+    private def input_pane : Tmux::Pane
+      @input_pane.not_nil!
+    end
+
+    private def output_pane : Tmux::Pane
+      @output_pane.not_nil!
+    end
+
+    private def tmux_session : Tmux::Session
+      @tmux_session.not_nil!
+    end
+
+    include Diagnostics
+    include Setup
+    include Selection
+    include Streaming
+    include Shutdown
+  end
+end

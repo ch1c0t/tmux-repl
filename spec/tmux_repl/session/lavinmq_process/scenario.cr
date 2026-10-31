@@ -1,0 +1,6 @@
+require "./scenario/Diagnostics"
+require "./scenario/Setup"
+require "./scenario/Selection"
+require "./scenario/Streaming"
+require "./scenario/Shutdown"
+require "./scenario/Scenario.class"
