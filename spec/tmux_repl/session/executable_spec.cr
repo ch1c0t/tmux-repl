@@ -51,6 +51,6 @@ describe TmuxREPL::Session::CompanionExecutable do
         nil
       )
     end
-    error.message.should contain("Cannot find executable")
+    error.message.to_s.should contain("Cannot find executable")
   end
 end
