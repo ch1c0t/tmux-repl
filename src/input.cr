@@ -5,12 +5,19 @@ module Input
   class Reader < Reply::Reader
     @ready_path : String
     @keyboard : TmuxREPL::Keyboard::Dispatcher
+    @keyboard_io : TmuxREPL::Keyboard::InputIO(IO::FileDescriptor)
   
     def initialize(
       @ready_path : String,
       @keyboard : TmuxREPL::Keyboard::Dispatcher
     )
+      @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN)
       super()
+    end
+
+    # Keep Reply's Enter handling correct when text and carriage return arrive together.
+    def read_next(from io : IO = STDIN) : String?
+      super(from: @keyboard_io)
     end
   
     # Enqueue all ordinary characters; bound shortcuts are consumed by the dispatcher.
