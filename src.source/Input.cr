@@ -7,7 +7,7 @@ class Reader < Reply::Reader
     @ready_path : String,
     @keyboard : TmuxREPL::Keyboard::Dispatcher
   )
-    @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN)
+    @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN, @keyboard)
     super()
   end
 
@@ -18,14 +18,14 @@ class Reader < Reply::Reader
 
   # Enqueue all ordinary characters; bound shortcuts are consumed by the dispatcher.
   private def on_char(char : Char) : Nil
-    super unless @keyboard.enqueue(char)
+    super unless TmuxREPL::Keyboard.binding_for(char)
   end
 
   # Reply may return a batch of characters when several arrive in one read.
   private def on_string(string : String) : Nil
     editable = String.build do |io|
       string.each_char do |char|
-        io << char unless @keyboard.enqueue(char)
+        io << char unless TmuxREPL::Keyboard.binding_for(char)
       end
     end
     super(editable) unless editable.empty?

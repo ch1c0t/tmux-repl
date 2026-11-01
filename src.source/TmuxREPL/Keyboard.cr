@@ -1,5 +1,6 @@
 enum Action
   ToggleOutputView
+  SubmitInput
 end
 
 struct Binding

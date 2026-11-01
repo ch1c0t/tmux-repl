@@ -50,6 +50,10 @@ module LavinMQProcess
         content.includes?("result=published"),
         "Keyboard trace did not record successful LavinMQ event publication."
       )
+      expect_condition(
+        content.includes?("action=SubmitInput"),
+        "Keyboard trace did not record the Enter key action."
+      )
     end
 
     private def expect_stripped_output : Nil

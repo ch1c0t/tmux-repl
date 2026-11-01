@@ -254,6 +254,7 @@ module TmuxREPL
   module Keyboard
     enum Action
       ToggleOutputView
+      SubmitInput
     end
 
     struct Binding
@@ -312,7 +313,10 @@ module TmuxREPL
       @source_offset = 0
       @eof = false
 
-      def initialize(@source : T)
+      def initialize(
+        @source : T,
+        @keyboard : Dispatcher? = nil
+      )
       end
 
       def read(slice : Bytes) : Int32
@@ -327,6 +331,9 @@ module TmuxREPL
 
         slice[0, count].copy_from(@source_buffer[@source_offset, count])
         @source_offset += count
+        if keyboard = @keyboard
+          String.new(slice[0, count]).each_char { |char| keyboard.enqueue(char) }
+        end
         count
       end
 
@@ -483,6 +490,9 @@ module TmuxREPL
       # Queue every character before Reply edits it or Output reads the next one.
       def enqueue(character : Char) : Action?
         action = Keyboard.action_for(character)
+        if @pane == "input" && (character == '\r' || character == '\n')
+          action = Action::SubmitInput
+        end
         press = KeyPress.new(character, action)
 
         @state_mutex.synchronize do
@@ -538,6 +548,8 @@ module TmuxREPL
                      STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                      "publish_failed"
                    end
+                 when Action::SubmitInput
+                   "handled_by_reply"
                  else
                    @pane == "input" ? "handled_by_reply" : "ignored"
                  end

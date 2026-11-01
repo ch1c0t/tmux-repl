@@ -3,7 +3,10 @@
 @source_offset = 0
 @eof = false
 
-def initialize(@source : T)
+def initialize(
+  @source : T,
+  @keyboard : Dispatcher? = nil
+)
 end
 
 def read(slice : Bytes) : Int32
@@ -18,6 +21,9 @@ def read(slice : Bytes) : Int32
 
   slice[0, count].copy_from(@source_buffer[@source_offset, count])
   @source_offset += count
+  if keyboard = @keyboard
+    String.new(slice[0, count]).each_char { |char| keyboard.enqueue(char) }
+  end
   count
 end
 

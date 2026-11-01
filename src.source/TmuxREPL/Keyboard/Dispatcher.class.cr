@@ -30,6 +30,9 @@ end
 # Queue every character before Reply edits it or Output reads the next one.
 def enqueue(character : Char) : Action?
   action = Keyboard.action_for(character)
+  if @pane == "input" && (character == '\r' || character == '\n')
+    action = Action::SubmitInput
+  end
   press = KeyPress.new(character, action)
 
   @state_mutex.synchronize do
@@ -85,6 +88,8 @@ private def dispatch(press : KeyPress) : Nil
                STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                "publish_failed"
              end
+           when Action::SubmitInput
+             "handled_by_reply"
            else
              @pane == "input" ? "handled_by_reply" : "ignored"
            end
