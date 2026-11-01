@@ -2,6 +2,7 @@
 def run : Nil
   prepare_startup
   keyboard : TmuxREPL::Keyboard::Dispatcher? = nil
+  terminal_mode = TerminalMode.new
 
   begin
     channel = Global.amqp_channel
@@ -20,6 +21,7 @@ def run : Nil
     reader = Reader.new(input_pid_path, keyboard)
     File.delete(startup_stage_path) if File.exists?(startup_stage_path)
 
+    terminal_mode.enable
     history = TmuxREPL::InputHistory.new
     reader.read_loop do |expression|
       next if expression.strip.empty?
@@ -33,6 +35,7 @@ def run : Nil
   ensure
     begin
       keyboard.try &.stop
+      terminal_mode.restore
     ensure
       cleanup_readiness
     end
