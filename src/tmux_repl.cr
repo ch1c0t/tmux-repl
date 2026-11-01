@@ -363,7 +363,7 @@ module TmuxREPL
       # Keep Enter separate from a batched text read so Reply can submit the line.
       private def bytes_before_carriage_return(available : Int32) : Int32
         available.times do |index|
-          return index == 0 ? 1 : index if @source_buffer[@source_offset + index] == '\\r'.ord
+          return index == 0 ? 1 : index if @source_buffer[@source_offset + index] == '\r'.ord
         end
         available
       end
