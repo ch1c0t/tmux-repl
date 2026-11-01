@@ -1,3 +1,4 @@
+require "io/console"
 require "reply"
 require "./tmux_repl"
 

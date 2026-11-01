@@ -432,7 +432,8 @@ module TmuxREPL
           io << " character=" << press.character.inspect
           io << " action=" << action
           io << " elapsed_since_previous_ms=" << elapsed
-          io << " result=" << result << '\\n'
+          io << " result=" << result
+          io << 10_u8.chr
         end
 
         file.flock_exclusive do
