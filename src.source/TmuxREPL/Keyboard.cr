@@ -1,4 +1,3 @@
-module Keyboard
   enum Action
     ToggleOutputView
   end
@@ -53,4 +52,3 @@ module Keyboard
     BINDINGS.map { |binding| binding.help_line }.join("\n")
   end
 
-end
