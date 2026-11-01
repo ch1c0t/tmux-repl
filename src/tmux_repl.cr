@@ -326,7 +326,7 @@ module TmuxREPL
         return 0 if @eof
 
         available = @source_size - @source_offset
-        count = bytes_before_carriage_return(available)
+        count = bytes_before_line_ending(available)
         count = Math.min(count, slice.size)
 
         slice[0, count].copy_from(@source_buffer[@source_offset, count])
@@ -368,9 +368,11 @@ module TmuxREPL
       end
 
       # Keep Enter separate from a batched text read so Reply can submit the line.
-      private def bytes_before_carriage_return(available : Int32) : Int32
+      private def bytes_before_line_ending(available : Int32) : Int32
         available.times do |index|
-          return index == 0 ? 1 : index if @source_buffer[@source_offset + index] == '\r'.ord
+          byte = @source_buffer[@source_offset + index]
+          return index == 0 ? 1 : index if byte == '\r'.ord
+          return index == 0 ? 1 : index if byte == '\n'.ord && index == available - 1
         end
         available
       end
