@@ -1,4 +1,4 @@
-InputIO(T)
+InputIO(T):IO
 KeyPress
 Trace
 Dispatcher
