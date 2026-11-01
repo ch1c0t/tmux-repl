@@ -4,6 +4,7 @@
 @trace : Trace
 @started = false
 @stopped = false
+@joined = false
 
 def initialize(
   @session_name : String,
@@ -41,13 +42,14 @@ end
 # Close the queue and wait for the consumer to drain all pending characters.
 def stop : Nil
   should_wait = @state_mutex.synchronize do
-    if @stopped
-      false
-    else
+    unless @stopped
       @stopped = true
       @queue.close
-      @started
     end
+
+    wait = @started && !@joined
+    @joined = true if wait
+    wait
   end
 
   @finished.receive if should_wait
@@ -58,11 +60,11 @@ private def consume : Nil
     dispatch(@queue.pop)
   end
 rescue ex
-  STDERR.puts "tmux.repl.#{@pane}: keyboard dispatcher stopped: #{ex.message}" unless @queue.closed?
-  @state_mutex.synchronize do
-    unless @stopped
+  unless @queue.closed?
+    STDERR.puts "tmux.repl.#{@pane}: keyboard dispatcher stopped: #{ex.message}"
+    @state_mutex.synchronize do
       @stopped = true
-      @queue.close
+      @queue.close unless @queue.closed?
     end
   end
 ensure

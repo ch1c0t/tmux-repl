@@ -319,20 +319,23 @@ module TmuxREPL
     end
 
     class Trace
-      @file : File?
+      @file : File? = nil
       @previous_monotonic_at : Time::Instant?
 
-      def initialize(session_name : String, @pane : String, path : String? = nil)
+      def initialize(session_name : String, pane : String, path : String? = nil)
+        @pane = pane
         return unless path || trace_enabled?
 
-        trace_path = path || self.class.path_for(session_name)
-        FileUtils.mkdir_p(File.dirname(trace_path))
-        @file = File.open(trace_path, "a")
-        File.chmod(trace_path, 0o600)
-      rescue ex
-        @file.try &.close
-        @file = nil
-        STDERR.puts "tmux.repl.#{@pane}: cannot open keyboard trace: #{ex.message}"
+        begin
+          trace_path = path || self.class.path_for(session_name)
+          FileUtils.mkdir_p(File.dirname(trace_path))
+          @file = File.open(trace_path, "a")
+          File.chmod(trace_path, 0o600)
+        rescue ex
+          @file.try &.close
+          @file = nil
+          STDERR.puts "tmux.repl.#{@pane}: cannot open keyboard trace: #{ex.message}"
+        end
       end
 
       def self.path_for(session_name : String) : String
@@ -372,8 +375,11 @@ module TmuxREPL
       def close : Nil
         if file = @file
           file.close unless file.closed?
-          @file = nil
         end
+      rescue ex
+        STDERR.puts "tmux.repl.#{@pane}: cannot close keyboard trace: #{ex.message}"
+      ensure
+        @file = nil
       end
 
       private def trace_enabled? : Bool
@@ -388,6 +394,7 @@ module TmuxREPL
       @trace : Trace
       @started = false
       @stopped = false
+      @joined = false
 
       def initialize(
         @session_name : String,
@@ -425,13 +432,14 @@ module TmuxREPL
       # Close the queue and wait for the consumer to drain all pending characters.
       def stop : Nil
         should_wait = @state_mutex.synchronize do
-          if @stopped
-            false
-          else
+          unless @stopped
             @stopped = true
             @queue.close
-            @started
           end
+
+          wait = @started && !@joined
+          @joined = true if wait
+          wait
         end
 
         @finished.receive if should_wait
@@ -442,11 +450,11 @@ module TmuxREPL
           dispatch(@queue.pop)
         end
       rescue ex
-        STDERR.puts "tmux.repl.#{@pane}: keyboard dispatcher stopped: #{ex.message}" unless @queue.closed?
-        @state_mutex.synchronize do
-          unless @stopped
+        unless @queue.closed?
+          STDERR.puts "tmux.repl.#{@pane}: keyboard dispatcher stopped: #{ex.message}"
+          @state_mutex.synchronize do
             @stopped = true
-            @queue.close
+            @queue.close unless @queue.closed?
           end
         end
       ensure
