@@ -1,15 +1,22 @@
 class Reader < Reply::Reader
   @ready_path : String
   @keyboard : TmuxREPL::Keyboard::Dispatcher
+  @keyboard_io : TmuxREPL::Keyboard::InputIO(IO::FileDescriptor)
 
   def initialize(
     @ready_path : String,
     @keyboard : TmuxREPL::Keyboard::Dispatcher
   )
+    @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN)
     super()
   end
 
-  # Queue every character; mapped shortcuts are consumed asynchronously.
+  # Reply may batch ordinary text with the Enter byte; keep Enter parseable.
+  def read_next(from io : IO = STDIN) : String?
+    super(from: @keyboard_io)
+  end
+
+  # Enqueue all ordinary characters; bound shortcuts are consumed by the dispatcher.
   private def on_char(char : Char) : Nil
     super unless @keyboard.enqueue(char)
   end

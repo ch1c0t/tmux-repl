@@ -27,7 +27,7 @@ describe TmuxREPL::Keyboard::Trace do
     rows[0].should contain("character='x'")
     rows[0].should contain("action=reply_input")
     rows[0].should contain("elapsed_since_previous_ms=first")
-    rows[1].should contain("character='\\u0007'")
+    rows[1].should contain("character='\\a'")
     rows[1].should contain("action=ToggleOutputView")
     rows[1].should contain("elapsed_since_previous_ms=")
     rows[1].should contain("result=published")
