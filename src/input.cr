@@ -13,9 +13,10 @@ module Input
       super()
     end
   
-    # Ctrl+G is shared with the output pane and never enters the command buffer.
+    # Dispatch shared keyboard actions without adding shortcuts to the command buffer.
     private def on_char(char : Char) : Nil
-      if char == '\u0007'
+      case TmuxREPL::Keyboard.action_for(char)
+      when TmuxREPL::Keyboard::Action::ToggleOutputView
         TmuxREPL.publish_event(@events, "toggle_view", @session_name, 0_u64)
       else
         super
@@ -80,7 +81,7 @@ module Input
           puts ":prev       Select the previous input."
           puts ":next       Select the next input."
           puts ":list       List submitted inputs."
-          puts "Ctrl+G      Toggle stripped/raw output from either pane."
+          puts TmuxREPL::Keyboard.help_text
           true
         else
           false

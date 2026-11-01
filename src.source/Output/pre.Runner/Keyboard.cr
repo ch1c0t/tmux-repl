@@ -4,10 +4,11 @@ private def watch_keyboard(view : View, terminal_mode : TerminalMode) : Nil
   spawn do
     begin
       while key = STDIN.read_char
-        next unless key == '\u0007'
-
-        view.toggle_view
-        view.render
+        case TmuxREPL::Keyboard.action_for(key)
+        when TmuxREPL::Keyboard::Action::ToggleOutputView
+          view.toggle_view
+          view.render
+        end
       end
     rescue IO::Error
       # The pane may close while the keyboard reader is waiting.

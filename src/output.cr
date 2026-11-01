@@ -106,10 +106,11 @@ module Output
         spawn do
           begin
             while key = STDIN.read_char
-              next unless key == '\u0007'
-      
-              view.toggle_view
-              view.render
+              case TmuxREPL::Keyboard.action_for(key)
+              when TmuxREPL::Keyboard::Action::ToggleOutputView
+                view.toggle_view
+                view.render
+              end
             end
           rescue IO::Error
             # The pane may close while the keyboard reader is waiting.
@@ -263,7 +264,8 @@ module Output
             "STREAMING"
           end
       
-          io.puts "INPUT ##{selected} [#{mode_label}; Ctrl+G toggles view]"
+          toggle_key = TmuxREPL::Keyboard.label_for(TmuxREPL::Keyboard::Action::ToggleOutputView)
+          io.puts "INPUT ##{selected} [#{mode_label}; #{toggle_key} toggles view]"
           io.puts command
           io.puts "─" * 40
       

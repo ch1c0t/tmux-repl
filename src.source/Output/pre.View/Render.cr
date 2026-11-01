@@ -26,7 +26,8 @@ def render(io : IO = STDOUT) : Nil
       "STREAMING"
     end
 
-    io.puts "INPUT ##{selected} [#{mode_label}; Ctrl+G toggles view]"
+    toggle_key = TmuxREPL::Keyboard.label_for(TmuxREPL::Keyboard::Action::ToggleOutputView)
+    io.puts "INPUT ##{selected} [#{mode_label}; #{toggle_key} toggles view]"
     io.puts command
     io.puts "─" * 40
 

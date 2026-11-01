@@ -48,7 +48,7 @@ private def handle_control(
     puts ":prev       Select the previous input."
     puts ":next       Select the next input."
     puts ":list       List submitted inputs."
-    puts "Ctrl+G      Toggle stripped/raw output from either pane."
+    puts TmuxREPL::Keyboard.help_text
     true
   else
     false
