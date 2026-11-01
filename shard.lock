@@ -16,6 +16,10 @@ shards:
     git: https://github.com/ch1c0t/crystal.pty.git
     version: 0.1.0+git.commit.cc7e229e843f190202067be5ffc4e7167a11adbb
 
+  queue:
+    git: https://github.com/ch1c0t/crystal.queue.git
+    version: 0.0.0+git.commit.3ebc38be7ee2c49258365d1d95a454a1c0ffe040
+
   reply:
     git: https://github.com/i3oris/reply.git
     version: 0.4.0
@@ -23,4 +27,3 @@ shards:
   tmux:
     git: https://github.com/ch1c0t/crystal.tmux.git
     version: 0.0.0+git.commit.36d9f13d48b30866ab28cf98b7cb3c412dadb4bb
-

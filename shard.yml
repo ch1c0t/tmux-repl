@@ -25,4 +25,7 @@ dependencies:
   tmux:
     github: ch1c0t/crystal.tmux
     branch: main
+  queue:
+    github: ch1c0t/crystal.queue
+    commit: 3ebc38be7ee2c49258365d1d95a454a1c0ffe040
 crystal: ">= 1.21.0"

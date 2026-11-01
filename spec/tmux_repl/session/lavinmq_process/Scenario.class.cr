@@ -26,6 +26,7 @@ module LavinMQProcess
         "XDG_STATE_HOME" => ENV["XDG_STATE_HOME"]?,
         "PATH"           => ENV["PATH"]?,
         "TMUX"           => ENV["TMUX"]?,
+        "LOG_LEVEL"       => ENV["LOG_LEVEL"]?,
       }
       @server = Tmux::Server.new(socket_path: File.join(@state_home, "tmux.sock"))
       @repl = TmuxREPL::Session.new(@name)

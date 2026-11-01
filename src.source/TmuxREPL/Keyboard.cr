@@ -51,4 +51,3 @@ end
 def self.help_text : String
   BINDINGS.map { |binding| binding.help_line }.join("\n")
 end
-

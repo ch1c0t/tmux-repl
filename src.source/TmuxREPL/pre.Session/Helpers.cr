@@ -4,6 +4,20 @@ private def amqp_environment : Hash(String, String)
 
   environment = {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
   environment.merge!(@environment)
+  environment["TMUX_REPL_SESSION_NAME"] = @name
+
+  unless environment.has_key?("XDG_STATE_HOME")
+    if state_home = ENV["XDG_STATE_HOME"]?
+      environment["XDG_STATE_HOME"] = state_home
+    end
+  end
+
+  unless environment.has_key?("LOG_LEVEL")
+    if log_level = ENV["LOG_LEVEL"]?
+      environment["LOG_LEVEL"] = log_level
+    end
+  end
+
   if TmuxREPL.trace_timing_enabled?
     environment["TMUX_REPL_TRACE_TIMING"] = "1"
     environment["TMUX_REPL_TRACE_FILE"] = File.join(state_dir, "timing.log")

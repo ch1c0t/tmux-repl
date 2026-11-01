@@ -4,23 +4,28 @@ require "./tmux_repl"
 module Input
   class Reader < Reply::Reader
     @ready_path : String
+    @keyboard : TmuxREPL::Keyboard::Dispatcher
   
     def initialize(
       @ready_path : String,
-      @session_name : String,
-      @events : AMQP::Client::Queue
+      @keyboard : TmuxREPL::Keyboard::Dispatcher
     )
       super()
     end
   
-    # Dispatch shared keyboard actions without adding shortcuts to the command buffer.
+    # Enqueue all ordinary characters; bound shortcuts are consumed by the dispatcher.
     private def on_char(char : Char) : Nil
-      case TmuxREPL::Keyboard.action_for(char)
-      when TmuxREPL::Keyboard::Action::ToggleOutputView
-        TmuxREPL.publish_event(@events, "toggle_view", @session_name, 0_u64)
-      else
-        super
+      super unless @keyboard.enqueue(char)
+    end
+
+    # Reply may return a batch of characters when several arrive in one read.
+    private def on_string(string : String) : Nil
+      editable = String.build do |io|
+        string.each_char do |char|
+          io << char unless @keyboard.enqueue(char)
+        end
       end
+      super(editable) unless editable.empty?
     end
   
     def prompt(io : IO, line_number : Int32, color : Bool)
@@ -140,6 +145,7 @@ module Input
       # Connect to the streams, then read and dispatch user input.
       def run : Nil
         prepare_startup
+        keyboard : TmuxREPL::Keyboard::Dispatcher? = nil
       
         begin
           channel = Global.amqp_channel
@@ -150,8 +156,12 @@ module Input
           update_startup_stage("declaring event stream")
           events = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
       
+          update_startup_stage("starting keyboard dispatcher")
+          keyboard = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "input", events)
+          keyboard.start
+      
           update_startup_stage("initializing Reply reader")
-          reader = Reader.new(input_pid_path, @session_name, events)
+          reader = Reader.new(input_pid_path, keyboard)
           File.delete(startup_stage_path) if File.exists?(startup_stage_path)
       
           history = TmuxREPL::InputHistory.new
@@ -165,7 +175,11 @@ module Input
           report_startup_failure(ex)
           exit 1
         ensure
-          cleanup_readiness
+          begin
+            keyboard.try &.stop
+          ensure
+            cleanup_readiness
+          end
         end
       end
     end

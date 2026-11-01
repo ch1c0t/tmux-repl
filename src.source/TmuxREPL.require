@@ -2,3 +2,4 @@ file_utils
 json
 tmux
 global-amqp_channel
+queue

@@ -100,17 +100,16 @@ module Output
     end
   
     module Keyboard
-      private def watch_keyboard(view : View, terminal_mode : TerminalMode) : Nil
+      private def watch_keyboard(
+        dispatcher : TmuxREPL::Keyboard::Dispatcher,
+        terminal_mode : TerminalMode
+      ) : Nil
         return unless terminal_mode.enable
       
         spawn do
           begin
             while key = STDIN.read_char
-              case TmuxREPL::Keyboard.action_for(key)
-              when TmuxREPL::Keyboard::Action::ToggleOutputView
-                view.toggle_view
-                view.render
-              end
+              dispatcher.enqueue(key)
             end
           rescue IO::Error
             # The pane may close while the keyboard reader is waiting.
@@ -127,6 +126,7 @@ module Output
         prepare_startup
         event_queue : AMQP::Client::Queue? = nil
         consumer_tag : String? = nil
+        dispatcher : TmuxREPL::Keyboard::Dispatcher? = nil
         terminal_mode = TerminalMode.new
       
         begin
@@ -152,17 +152,24 @@ module Output
             handle_message(message, view)
           end
       
+          dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue)
+          dispatcher.start
+      
           view.render
-          watch_keyboard(view, terminal_mode)
+          watch_keyboard(dispatcher, terminal_mode)
           mark_ready
           shutdown.receive
         rescue ex
           report_startup_failure(ex)
           exit 1
         ensure
-          terminal_mode.restore
-          unsubscribe(event_queue, consumer_tag)
-          cleanup_readiness
+          begin
+            dispatcher.try &.stop
+          ensure
+            terminal_mode.restore
+            unsubscribe(event_queue, consumer_tag)
+            cleanup_readiness
+          end
         end
       end
     end

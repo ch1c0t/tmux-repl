@@ -1,22 +1,27 @@
 class Reader < Reply::Reader
   @ready_path : String
+  @keyboard : TmuxREPL::Keyboard::Dispatcher
 
   def initialize(
     @ready_path : String,
-    @session_name : String,
-    @events : AMQP::Client::Queue
+    @keyboard : TmuxREPL::Keyboard::Dispatcher
   )
     super()
   end
 
-  # Dispatch shared keyboard actions without adding shortcuts to the command buffer.
+  # Queue every character; mapped shortcuts are consumed asynchronously.
   private def on_char(char : Char) : Nil
-    case TmuxREPL::Keyboard.action_for(char)
-    when TmuxREPL::Keyboard::Action::ToggleOutputView
-      TmuxREPL.publish_event(@events, "toggle_view", @session_name, 0_u64)
-    else
-      super
+    super unless @keyboard.enqueue(char)
+  end
+
+  # Reply may return a batch of characters when several arrive in one read.
+  private def on_string(string : String) : Nil
+    editable = String.build do |io|
+      string.each_char do |char|
+        io << char unless @keyboard.enqueue(char)
+      end
     end
+    super(editable) unless editable.empty?
   end
 
   def prompt(io : IO, line_number : Int32, color : Bool)

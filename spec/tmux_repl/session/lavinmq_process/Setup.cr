@@ -2,6 +2,7 @@ module LavinMQProcess
   module Setup
     private def start : Nil
       ENV["XDG_STATE_HOME"] = @state_home
+      ENV["LOG_LEVEL"] = "TRACE"
       FileUtils.mkdir_p(@state_home)
 
       # Start tmux before adding bin/ to PATH: its daemon keeps the original PATH.
@@ -32,6 +33,21 @@ module LavinMQProcess
         "LAVINMQ_AMQP_UNIXSOCKET=#{socket_path}",
         environment.stdout.strip,
         "The REPL tmux session did not inherit the LavinMQ socket environment variable."
+      )
+
+      session_name_environment = @server.cmd("show-environment", "-t", name, "TMUX_REPL_SESSION_NAME")
+      expect_condition(
+        session_name_environment.success? &&
+          session_name_environment.stdout.strip == "TMUX_REPL_SESSION_NAME=#{name}",
+        "The REPL tmux session did not receive TMUX_REPL_SESSION_NAME=#{name}.\n" \
+        "stdout: #{session_name_environment.stdout.inspect}\nstderr: #{session_name_environment.stderr.inspect}"
+      )
+
+      log_level_environment = @server.cmd("show-environment", "-t", name, "LOG_LEVEL")
+      expect_condition(
+        log_level_environment.success? && log_level_environment.stdout.strip == "LOG_LEVEL=TRACE",
+        "The REPL tmux session did not receive LOG_LEVEL=TRACE.\n" \
+        "stdout: #{log_level_environment.stdout.inspect}\nstderr: #{log_level_environment.stderr.inspect}"
       )
 
       @tmux_session = @server.session(name)
