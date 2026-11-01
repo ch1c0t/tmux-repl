@@ -15,6 +15,7 @@ module LavinMQProcess
 
       details << pane_snapshot("input", @input_pane)
       details << pane_snapshot("output", @output_pane)
+      details << keyboard_trace_snapshot
       details << tmux_snapshot
 
       begin
@@ -28,6 +29,16 @@ module LavinMQProcess
       end
 
       details.join("\n")
+    end
+
+    private def keyboard_trace_snapshot : String
+      path = File.join(@state_home, "tmux-repl", name, "keyboard.trace.log")
+      return "keyboard trace: missing (#{path})" unless File.exists?(path)
+
+      rows = File.read(path).lines.last(30)
+      "keyboard trace (last 30 rows):\n#{rows.join}"
+    rescue ex
+      "keyboard trace capture failed: #{ex.class}: #{ex.message}"
     end
 
     private def file_state(path : String) : String
