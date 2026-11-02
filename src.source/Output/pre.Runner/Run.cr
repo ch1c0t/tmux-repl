@@ -4,7 +4,7 @@ def run : Nil
   event_queue : AMQP::Client::Queue? = nil
   consumer_tag : String? = nil
   dispatcher : TmuxREPL::Keyboard::Dispatcher? = nil
-  terminal_mode = TerminalMode.new
+  terminal_mode = TmuxREPL::TerminalMode.new
 
   begin
     channel = Global.amqp_channel

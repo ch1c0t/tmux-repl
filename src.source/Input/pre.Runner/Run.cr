@@ -2,7 +2,7 @@
 def run : Nil
   prepare_startup
   keyboard : TmuxREPL::Keyboard::Dispatcher? = nil
-  terminal_mode = TerminalMode.new
+  terminal_mode = TmuxREPL::TerminalMode.new
 
   begin
     channel = Global.amqp_channel

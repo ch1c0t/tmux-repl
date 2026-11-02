@@ -1,6 +1,6 @@
 private def watch_keyboard(
   dispatcher : TmuxREPL::Keyboard::Dispatcher,
-  terminal_mode : TerminalMode
+  terminal_mode : TmuxREPL::TerminalMode
 ) : Nil
   return unless terminal_mode.enable
 
