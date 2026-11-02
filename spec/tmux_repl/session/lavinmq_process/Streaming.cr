@@ -54,6 +54,14 @@ module LavinMQProcess
         content.includes?("action=SubmitInput"),
         "Keyboard trace did not record the Enter key action."
       )
+      expect_condition(
+        content.includes?("key=Ctrl+Up") && content.includes?("action=SelectPrevious"),
+        "Keyboard trace did not record Ctrl+Up input selection."
+      )
+      expect_condition(
+        content.includes?("key=Ctrl+Down") && content.includes?("action=SelectNext"),
+        "Keyboard trace did not record Ctrl+Down input selection."
+      )
     end
 
     private def expect_stripped_output : Nil

@@ -53,6 +53,8 @@ ID. Use these controls in the left pane to select which input is shown on the ri
     :select ID  Display the output associated with a specific input
     :prev       Select the previous input
     :next       Select the next input
+    Ctrl+Up     Select the previous input
+    Ctrl+Down   Select the next input
     :help       Show these controls
 
 The output pane streams the raw PTY transcript while a command is running, then

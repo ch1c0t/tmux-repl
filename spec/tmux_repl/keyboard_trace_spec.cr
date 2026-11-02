@@ -17,12 +17,14 @@ describe TmuxREPL::Keyboard::Trace do
         TmuxREPL::Keyboard::Action::ToggleOutputView
       )
       trace.record(second, "ToggleOutputView", "published")
+      selection = TmuxREPL::Keyboard::KeyPress.new("Ctrl+Up", TmuxREPL::Keyboard::Action::SelectPrevious)
+      trace.record(selection, "SelectPrevious", "handled_by_input_reader")
     ensure
       trace.close
     end
 
     rows = File.read(path).lines
-    rows.size.should eq(2)
+    rows.size.should eq(3)
     rows[0].should contain("pressed_at=")
     rows[0].should contain("character='x'")
     rows[0].should contain("action=reply_input")
@@ -31,6 +33,9 @@ describe TmuxREPL::Keyboard::Trace do
     rows[1].should contain("action=ToggleOutputView")
     rows[1].should contain("elapsed_since_previous_ms=")
     rows[1].should contain("result=published")
+    rows[2].should contain("key=Ctrl+Up")
+    rows[2].should contain("action=SelectPrevious")
+    rows[2].should contain("result=handled_by_input_reader")
   ensure
     FileUtils.rm_rf(directory) if directory
   end

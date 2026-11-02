@@ -18,11 +18,13 @@ def run : Nil
     keyboard.start
 
     update_startup_stage("initializing Reply reader")
-    reader = Reader.new(input_pid_path, keyboard)
+    history = TmuxREPL::InputHistory.new
+    on_previous = -> { handle_control(":prev", events, history); nil }
+    on_next = -> { handle_control(":next", events, history); nil }
+    reader = Reader.new(input_pid_path, keyboard, on_previous, on_next)
     File.delete(startup_stage_path) if File.exists?(startup_stage_path)
 
     terminal_mode.enable
-    history = TmuxREPL::InputHistory.new
     reader.read_loop do |expression|
       next if expression.strip.empty?
       next if handle_control(expression.strip, events, history)

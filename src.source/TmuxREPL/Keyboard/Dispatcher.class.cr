@@ -42,6 +42,15 @@ def enqueue(character : Char) : Action?
   action
 end
 
+# Queue a parsed Reply key sequence after its selection callback has run.
+def enqueue(binding : SequenceBinding) : Action
+  press = KeyPress.new(binding.label, binding.action)
+  @state_mutex.synchronize do
+    @queue.push(press) unless @stopped
+  end
+  binding.action
+end
+
 # Close the queue and wait for the consumer to drain all pending characters.
 def stop : Nil
   should_wait = @state_mutex.synchronize do
@@ -88,6 +97,8 @@ private def dispatch(press : KeyPress) : Nil
                STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                "publish_failed"
              end
+           when Action::SelectPrevious, Action::SelectNext
+             "handled_by_input_reader"
            when Action::SubmitInput
              "handled_by_reply"
            else

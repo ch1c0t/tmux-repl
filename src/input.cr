@@ -9,12 +9,12 @@ module Input
       def read_next(from io : IO = STDIN) : String?
         super(from: @keyboard_io)
       end
-      
+
       # Enqueue all ordinary characters; bound shortcuts are consumed by the dispatcher.
       private def on_char(char : Char) : Nil
         super unless TmuxREPL::Keyboard.binding_for(char)
       end
-      
+
       # Reply may return a batch of characters when several arrive in one read.
       private def on_string(string : String) : Nil
         editable = String.build do |io|
@@ -25,21 +25,51 @@ module Input
         super(editable) unless editable.empty?
       end
     end
-  
+
     @ready_path : String
     @keyboard : TmuxREPL::Keyboard::Dispatcher
     @keyboard_io : TmuxREPL::Keyboard::InputIO(IO::FileDescriptor)
-    
+    @on_previous : Proc(Nil)?
+    @on_next : Proc(Nil)?
+
     def initialize(
       @ready_path : String,
-      @keyboard : TmuxREPL::Keyboard::Dispatcher
+      @keyboard : TmuxREPL::Keyboard::Dispatcher,
+      @on_previous : Proc(Nil)? = nil,
+      @on_next : Proc(Nil)? = nil
     )
       @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN, @keyboard)
       super()
     end
-    
+
     include ReadNext
-    
+
+    private def on_ctrl_up(& : String ->) : Nil
+      if callback = @on_previous
+        if binding = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up")
+          callback.call
+          @keyboard.enqueue(binding)
+        else
+          super
+        end
+      else
+        super
+      end
+    end
+
+    private def on_ctrl_down(& : String ->) : Nil
+      if callback = @on_next
+        if binding = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down")
+          callback.call
+          @keyboard.enqueue(binding)
+        else
+          super
+        end
+      else
+        super
+      end
+    end
+
     def prompt(io : IO, line_number : Int32, color : Bool)
       super(io, line_number, color)
       File.write(@ready_path, Process.pid.to_s) unless File.exists?(@ready_path)
@@ -174,11 +204,13 @@ module Input
           keyboard.start
       
           update_startup_stage("initializing Reply reader")
-          reader = Reader.new(input_pid_path, keyboard)
+          history = TmuxREPL::InputHistory.new
+          on_previous = -> { handle_control(":prev", events, history); nil }
+          on_next = -> { handle_control(":next", events, history); nil }
+          reader = Reader.new(input_pid_path, keyboard, on_previous, on_next)
           File.delete(startup_stage_path) if File.exists?(startup_stage_path)
       
           terminal_mode.enable
-          history = TmuxREPL::InputHistory.new
           reader.read_loop do |expression|
             next if expression.strip.empty?
             next if handle_control(expression.strip, events, history)

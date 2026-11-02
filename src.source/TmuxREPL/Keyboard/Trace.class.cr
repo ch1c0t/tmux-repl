@@ -36,7 +36,11 @@ def record(press : KeyPress, action : String, result : String) : Nil
     io << "pressed_at=" << press.pressed_at.to_rfc3339(fraction_digits: 6)
     io << " pane=" << @pane
     io << " pid=" << Process.pid
+    if key = press.key
+    io << " key=" << key
+  else
     io << " character=" << press.character.inspect
+  end
     io << " action=" << action
     io << " elapsed_since_previous_ms=" << elapsed
     io << " result=" << result

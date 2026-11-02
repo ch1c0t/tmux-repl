@@ -254,6 +254,8 @@ module TmuxREPL
   module Keyboard
     enum Action
       ToggleOutputView
+      SelectPrevious
+      SelectNext
       SubmitInput
     end
     
@@ -276,6 +278,25 @@ module TmuxREPL
       end
     end
     
+    struct SequenceBinding
+      getter key : String
+      getter action : Action
+      getter label : String
+      getter description : String
+
+      def initialize(
+        @key : String,
+        @action : Action,
+        @label : String,
+        @description : String
+      )
+      end
+
+      def help_line : String
+        "#{label.ljust(12)}#{description}"
+      end
+    end
+    
     BINDINGS = [
       Binding.new(
         '\u0007',
@@ -284,11 +305,20 @@ module TmuxREPL
         "Toggle stripped/raw output from either pane."
       ),
     ]
+
+    SEQUENCE_BINDINGS = [
+      SequenceBinding.new("Ctrl+Up", Action::SelectPrevious, "Ctrl+Up", "Select the previous input."),
+      SequenceBinding.new("Ctrl+Down", Action::SelectNext, "Ctrl+Down", "Select the next input."),
+    ]
     
     def self.binding_for(key : Char) : Binding?
       BINDINGS.find { |binding| binding.key == key }
     end
     
+    def self.sequence_binding_for(key : String) : SequenceBinding?
+      SEQUENCE_BINDINGS.find { |binding| binding.key == key }
+    end
+
     def self.action_for(key : Char) : Action?
       if binding = binding_for(key)
         binding.action
@@ -300,11 +330,15 @@ module TmuxREPL
         return binding.label if binding.action == action
       end
     
+      SEQUENCE_BINDINGS.each do |binding|
+        return binding.label if binding.action == action
+      end
+    
       raise ArgumentError.new("No keyboard binding registered for #{action}")
     end
     
     def self.help_text : String
-      BINDINGS.map { |binding| binding.help_line }.join("\n")
+      (BINDINGS.map { |binding| binding.help_line } + SEQUENCE_BINDINGS.map { |binding| binding.help_line }).join("\n")
     end
   
     class InputIO(T) < IO
@@ -380,11 +414,19 @@ module TmuxREPL
   
     struct KeyPress
       getter character : Char
+      getter key : String?
       getter action : Action?
       getter pressed_at : Time
       getter monotonic_at : Time::Instant
       
       def initialize(@character : Char, @action : Action?)
+        @key = nil
+        @monotonic_at = Time.instant
+        @pressed_at = Time.utc
+      end
+
+      def initialize(@key : String, @action : Action)
+        @character = '\0'
         @monotonic_at = Time.instant
         @pressed_at = Time.utc
       end
@@ -429,7 +471,11 @@ module TmuxREPL
           io << "pressed_at=" << press.pressed_at.to_rfc3339(fraction_digits: 6)
           io << " pane=" << @pane
           io << " pid=" << Process.pid
-          io << " character=" << press.character.inspect
+          if key = press.key
+            io << " key=" << key
+          else
+            io << " character=" << press.character.inspect
+          end
           io << " action=" << action
           io << " elapsed_since_previous_ms=" << elapsed
           io << " result=" << result
@@ -505,6 +551,15 @@ module TmuxREPL
         action
       end
       
+      # Queue a parsed Reply key sequence after its selection callback has run.
+      def enqueue(binding : SequenceBinding) : Action
+        press = KeyPress.new(binding.label, binding.action)
+        @state_mutex.synchronize do
+          @queue.push(press) unless @stopped
+        end
+        binding.action
+      end
+
       # Close the queue and wait for the consumer to drain all pending characters.
       def stop : Nil
         should_wait = @state_mutex.synchronize do
@@ -551,6 +606,8 @@ module TmuxREPL
                      STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                      "publish_failed"
                    end
+                 when Action::SelectPrevious, Action::SelectNext
+                   "handled_by_input_reader"
                  when Action::SubmitInput
                    "handled_by_reply"
                  else
