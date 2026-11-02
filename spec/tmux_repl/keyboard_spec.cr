@@ -9,12 +9,12 @@ describe TmuxREPL::Keyboard do
 
   it "maps Ctrl+Up and Ctrl+Down to adjacent input selection" do
     previous = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up").not_nil!
-    next = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down").not_nil!
+    following = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down").not_nil!
 
     previous.action.should eq(TmuxREPL::Keyboard::Action::SelectPrevious)
-    next.action.should eq(TmuxREPL::Keyboard::Action::SelectNext)
+    following.action.should eq(TmuxREPL::Keyboard::Action::SelectNext)
     TmuxREPL::Keyboard.label_for(previous.action).should eq("Ctrl+Up")
-    TmuxREPL::Keyboard.label_for(next.action).should eq("Ctrl+Down")
+    TmuxREPL::Keyboard.label_for(following.action).should eq("Ctrl+Down")
   end
 
   it "does not assign actions to unbound keys" do
