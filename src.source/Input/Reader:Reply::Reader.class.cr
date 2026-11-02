@@ -22,10 +22,10 @@ private def on_ctrl_up(& : String ->) : Nil
       callback.call
       @keyboard.enqueue(binding)
     else
-      super
+      @editor.scroll_down
     end
   else
-    super
+    @editor.scroll_down
   end
 end
 
@@ -35,13 +35,12 @@ private def on_ctrl_down(& : String ->) : Nil
       callback.call
       @keyboard.enqueue(binding)
     else
-      super
+      @editor.scroll_up
     end
   else
-    super
+    @editor.scroll_up
   end
 end
-
 def prompt(io : IO, line_number : Int32, color : Bool)
   super(io, line_number, color)
   File.write(@ready_path, Process.pid.to_s) unless File.exists?(@ready_path)
