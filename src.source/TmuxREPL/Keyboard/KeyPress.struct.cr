@@ -1,4 +1,3 @@
-struct KeyPress
   getter character : Char
   getter key : String?
   getter action : Action?
@@ -16,4 +15,3 @@ struct KeyPress
     @monotonic_at = Time.instant
     @pressed_at = Time.utc
   end
-end
