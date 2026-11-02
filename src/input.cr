@@ -2,63 +2,6 @@ require "reply"
 require "./tmux_repl"
 
 module Input
-  class TerminalMode
-    @saved_state : String?
-
-    def enable : Bool
-      return false unless STDIN.tty?
-
-      state = IO::Memory.new
-      status = Process.run(
-        "stty",
-        ["-g"],
-        input: STDIN,
-        output: state,
-        error: Process::Redirect::Close
-      )
-      return false unless status.success?
-
-      saved_state = state.to_s.strip
-      return false if saved_state.empty?
-      @saved_state = saved_state
-
-      status = Process.run(
-        "stty",
-        ["-echo", "-icanon", "min", "1", "time", "0"],
-        input: STDIN,
-        output: Process::Redirect::Close,
-        error: Process::Redirect::Close
-      )
-      unless status.success?
-        restore
-        return false
-      end
-
-      true
-    rescue
-      restore
-      false
-    end
-
-    def restore : Nil
-      state = @saved_state
-      @saved_state = nil
-      return unless state
-
-      Process.run(
-        "stty",
-        [state],
-        input: STDIN,
-        output: Process::Redirect::Close,
-        error: Process::Redirect::Close
-      )
-      nil
-    rescue
-      nil
-    end
-
-  end
-
   class Reader < Reply::Reader
     @ready_path : String
     @keyboard : TmuxREPL::Keyboard::Dispatcher
@@ -71,8 +14,8 @@ module Input
       @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN, @keyboard)
       super()
     end
-
-    # Keep Reply's Enter handling correct when text and carriage return arrive together.
+  
+    # Reply may batch ordinary text with the Enter byte; keep Enter parseable.
     def read_next(from io : IO = STDIN) : String?
       super(from: @keyboard_io)
     end
@@ -81,7 +24,7 @@ module Input
     private def on_char(char : Char) : Nil
       super unless TmuxREPL::Keyboard.binding_for(char)
     end
-
+  
     # Reply may return a batch of characters when several arrive in one read.
     private def on_string(string : String) : Nil
       editable = String.build do |io|
@@ -243,6 +186,7 @@ module Input
         ensure
           begin
             keyboard.try &.stop
+            terminal_mode.restore
           ensure
             cleanup_readiness
           end
@@ -300,5 +244,61 @@ module Input
     include Controls
     include Submit
     include Run
+  end
+
+  class TerminalMode
+    @saved_state : String?
+    
+    def enable : Bool
+      return false unless STDIN.tty?
+    
+      state = IO::Memory.new
+      status = Process.run(
+        "stty",
+        ["-g"],
+        input: STDIN,
+        output: state,
+        error: Process::Redirect::Close
+      )
+      return false unless status.success?
+    
+      saved_state = state.to_s.strip
+      return false if saved_state.empty?
+      @saved_state = saved_state
+    
+      status = Process.run(
+        "stty",
+        ["-echo", "-icanon", "min", "1", "time", "0"],
+        input: STDIN,
+        output: Process::Redirect::Close,
+        error: Process::Redirect::Close
+      )
+      unless status.success?
+        restore
+        return false
+      end
+    
+      true
+    rescue
+      restore
+      false
+    end
+    
+    def restore : Nil
+      state = @saved_state
+      @saved_state = nil
+      return unless state
+    
+      Process.run(
+        "stty",
+        [state],
+        input: STDIN,
+        output: Process::Redirect::Close,
+        error: Process::Redirect::Close
+      )
+      nil
+    rescue
+      nil
+    end
   end
 end
