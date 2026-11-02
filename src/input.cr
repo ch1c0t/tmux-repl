@@ -9,12 +9,12 @@ module Input
       def read_next(from io : IO = STDIN) : String?
         super(from: @keyboard_io)
       end
-
+      
       # Enqueue all ordinary characters; bound shortcuts are consumed by the dispatcher.
       private def on_char(char : Char) : Nil
         super unless TmuxREPL::Keyboard.binding_for(char)
       end
-
+      
       # Reply may return a batch of characters when several arrive in one read.
       private def on_string(string : String) : Nil
         editable = String.build do |io|
@@ -25,13 +25,13 @@ module Input
         super(editable) unless editable.empty?
       end
     end
-
+  
     @ready_path : String
     @keyboard : TmuxREPL::Keyboard::Dispatcher
     @keyboard_io : TmuxREPL::Keyboard::InputIO(IO::FileDescriptor)
     @on_previous : Proc(Nil)?
     @on_next : Proc(Nil)?
-
+    
     def initialize(
       @ready_path : String,
       @keyboard : TmuxREPL::Keyboard::Dispatcher,
@@ -41,35 +41,34 @@ module Input
       @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN, @keyboard)
       super()
     end
-
+    
     include ReadNext
-
+    
     private def on_ctrl_up(& : String ->) : Nil
       if callback = @on_previous
         if binding = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up")
           callback.call
           @keyboard.enqueue(binding)
         else
-          super
+          @editor.scroll_down
         end
       else
-        super
+        @editor.scroll_down
       end
     end
-
+    
     private def on_ctrl_down(& : String ->) : Nil
       if callback = @on_next
         if binding = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down")
           callback.call
           @keyboard.enqueue(binding)
         else
-          super
+          @editor.scroll_up
         end
       else
-        super
+        @editor.scroll_up
       end
     end
-
     def prompt(io : IO, line_number : Int32, color : Bool)
       super(io, line_number, color)
       File.write(@ready_path, Process.pid.to_s) unless File.exists?(@ready_path)
@@ -136,13 +135,12 @@ module Input
       end
       
       private def select_input(
-        sequence : UInt64,
+        sequence_number : UInt64,
         events : AMQP::Client::Queue,
         history : TmuxREPL::InputHistory
       ) : Nil
-        TmuxREPL.publish_event(events, "select", @session_name, sequence)
-        history.select(sequence)
-        puts "Selected input ##{sequence}."
+        TmuxREPL.publish_event(events, "select", @session_name, sequence_number)
+        history.select(sequence_number)
       end
     end
   

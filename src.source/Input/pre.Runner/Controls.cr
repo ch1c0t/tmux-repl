@@ -56,11 +56,10 @@ private def handle_control(
 end
 
 private def select_input(
-  sequence : UInt64,
+  sequence_number : UInt64,
   events : AMQP::Client::Queue,
   history : TmuxREPL::InputHistory
 ) : Nil
-  TmuxREPL.publish_event(events, "select", @session_name, sequence)
-  history.select(sequence)
-  puts "Selected input ##{sequence}."
+  TmuxREPL.publish_event(events, "select", @session_name, sequence_number)
+  history.select(sequence_number)
 end

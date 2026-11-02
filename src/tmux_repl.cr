@@ -265,12 +265,7 @@ module TmuxREPL
       getter label : String
       getter description : String
     
-      def initialize(
-        @key : Char,
-        @action : Action,
-        @label : String,
-        @description : String
-      )
+      def initialize(@key : Char, @action : Action, @label : String, @description : String)
       end
     
       def help_line : String
@@ -283,15 +278,10 @@ module TmuxREPL
       getter action : Action
       getter label : String
       getter description : String
-
-      def initialize(
-        @key : String,
-        @action : Action,
-        @label : String,
-        @description : String
-      )
+    
+      def initialize(@key : String, @action : Action, @label : String, @description : String)
       end
-
+    
       def help_line : String
         "#{label.ljust(12)}#{description}"
       end
@@ -305,7 +295,7 @@ module TmuxREPL
         "Toggle stripped/raw output from either pane."
       ),
     ]
-
+    
     SEQUENCE_BINDINGS = [
       SequenceBinding.new("Ctrl+Up", Action::SelectPrevious, "Ctrl+Up", "Select the previous input."),
       SequenceBinding.new("Ctrl+Down", Action::SelectNext, "Ctrl+Down", "Select the next input."),
@@ -318,7 +308,7 @@ module TmuxREPL
     def self.sequence_binding_for(key : String) : SequenceBinding?
       SEQUENCE_BINDINGS.find { |binding| binding.key == key }
     end
-
+    
     def self.action_for(key : Char) : Action?
       if binding = binding_for(key)
         binding.action
@@ -329,16 +319,14 @@ module TmuxREPL
       BINDINGS.each do |binding|
         return binding.label if binding.action == action
       end
-    
       SEQUENCE_BINDINGS.each do |binding|
         return binding.label if binding.action == action
       end
-    
       raise ArgumentError.new("No keyboard binding registered for #{action}")
     end
     
     def self.help_text : String
-      (BINDINGS.map { |binding| binding.help_line } + SEQUENCE_BINDINGS.map { |binding| binding.help_line }).join("\n")
+      (BINDINGS.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
     end
   
     class InputIO(T) < IO
@@ -413,23 +401,23 @@ module TmuxREPL
     end
   
     struct KeyPress
-      getter character : Char
-      getter key : String?
-      getter action : Action?
-      getter pressed_at : Time
-      getter monotonic_at : Time::Instant
+        getter character : Char
+        getter key : String?
+        getter action : Action?
+        getter pressed_at : Time
+        getter monotonic_at : Time::Instant
       
-      def initialize(@character : Char, @action : Action?)
-        @key = nil
-        @monotonic_at = Time.instant
-        @pressed_at = Time.utc
-      end
-
-      def initialize(@key : String, @action : Action)
-        @character = '\0'
-        @monotonic_at = Time.instant
-        @pressed_at = Time.utc
-      end
+        def initialize(@character : Char, @action : Action?)
+          @key = nil
+          @monotonic_at = Time.instant
+          @pressed_at = Time.utc
+        end
+      
+        def initialize(@key : String, @action : Action)
+          @character = '\0'
+          @monotonic_at = Time.instant
+          @pressed_at = Time.utc
+        end
     end
   
     class Trace
@@ -472,10 +460,10 @@ module TmuxREPL
           io << " pane=" << @pane
           io << " pid=" << Process.pid
           if key = press.key
-            io << " key=" << key
-          else
-            io << " character=" << press.character.inspect
-          end
+          io << " key=" << key
+        else
+          io << " character=" << press.character.inspect
+        end
           io << " action=" << action
           io << " elapsed_since_previous_ms=" << elapsed
           io << " result=" << result
@@ -559,7 +547,7 @@ module TmuxREPL
         end
         binding.action
       end
-
+      
       # Close the queue and wait for the consumer to drain all pending characters.
       def stop : Nil
         should_wait = @state_mutex.synchronize do
