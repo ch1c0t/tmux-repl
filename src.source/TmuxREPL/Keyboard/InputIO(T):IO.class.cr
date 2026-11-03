@@ -101,21 +101,21 @@ end
 
 private def alt_navigation_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
   if matches?(@source_buffer, offset, limit, "\ek")
-    {Keyboard.sequence_binding_for("Alt+K").not_nil!, 2}
+    {TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!, 2}
   elsif matches?(@source_buffer, offset, limit, "\ej")
-    {Keyboard.sequence_binding_for("Alt+J").not_nil!, 2}
+    {TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!, 2}
   elsif matches?(@source_buffer, offset, limit, "\e[107;3u")
-    {Keyboard.sequence_binding_for("Alt+K").not_nil!, 8}
+    {TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!, 8}
   elsif matches?(@source_buffer, offset, limit, "\e[106;3u")
-    {Keyboard.sequence_binding_for("Alt+J").not_nil!, 8}
+    {TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!, 8}
   end
 end
 
 private def control_navigation_binding(offset : Int32, limit : Int32) : SequenceBinding?
   if matches?(@source_buffer, offset, limit, "\e[1;5A")
-    Keyboard.sequence_binding_for("Ctrl+Up")
+    TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up")
   elsif matches?(@source_buffer, offset, limit, "\e[1;5B")
-    Keyboard.sequence_binding_for("Ctrl+Down")
+    TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down")
   end
 end
 
