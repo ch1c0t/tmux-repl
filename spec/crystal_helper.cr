@@ -23,7 +23,7 @@ def wait_for_file(path : String, timeout : Time::Span = 5.seconds) : Bool
 end
 
 def pane_text(pane : Tmux::Pane) : String
-  pane.capture_pane.join("\n")
+  pane.capture_pane(join_wrapped: true).join("\n")
 end
 
 def pane_shows?(
