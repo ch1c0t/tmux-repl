@@ -53,7 +53,7 @@ private def output_lines(text : String) : Array(String)
   normalized = text.gsub("\r\n", "\n").gsub("\r", "\n")
   return [] of String if normalized.empty?
 
-  lines = normalized.split('\n', nil, false)
+  lines = normalized.split('\n', remove_empty: false)
   lines.pop if normalized.ends_with?('\n')
   lines
 end
