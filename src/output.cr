@@ -150,7 +150,6 @@ module Output
           end
         end
       end
-
     end
   
     module Run
@@ -209,8 +208,8 @@ module Output
           end
         end
       end
-
     end
+  
     getter session_name : String
     
     def initialize(@session_name : String)
@@ -304,7 +303,6 @@ module Output
           io.flush
         end
       end
-
     end
   
     module Update
@@ -341,7 +339,6 @@ module Output
           end
         end
       end
-
     end
   
     @inputs = {} of UInt64 => String
@@ -417,6 +414,5 @@ module Output
     
     include Update
     include Render
-
   end
 end

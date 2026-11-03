@@ -357,7 +357,7 @@ module TmuxREPL
     def self.help_text : String
       (BINDINGS.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
     end
-
+  
     class InputIO(T) < IO
       @source_buffer = Bytes.new(8192)
       @read_buffer = Bytes.new(8192 * 3)
@@ -667,7 +667,7 @@ module TmuxREPL
         action
       end
       
-      # Queue a parsed Reply key sequence after its selection callback has run.
+      # Queue a parsed key sequence after its handler has decided what to do with it.
       def enqueue(binding : SequenceBinding) : Action
         press = KeyPress.new(binding.label, binding.action)
         @state_mutex.synchronize do

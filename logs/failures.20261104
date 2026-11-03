@@ -1,0 +1,127 @@
+......E......................................
+
+Failures:
+
+  1) LavinMQ-backed REPL processes keeps input history and streams, strips, and toggles command output
+
+       Expected the output pane not to contain "START_MARK_", but it did.
+       Output pane contents:
+       INPUT #3 [RAW; Ctrl+G toggles view]
+       for i in $(seq 1 4); do echo "Streaming
+       Tick $i..." && sleep 0.2; done
+       ────────────────────────────────────────
+       echo START_MARK_1793745554270_555; (
+       for i in $(seq 1 4); do echo "Streaming
+       Tick $i..." && sleep 0.2; done
+       ); echo END_MARK_1793745554270_555__$?__
+       > > START_MARK_1793745554270_555
+       Streaming Tick 1...
+       Streaming Tick 2...
+       Streaming Tick 3...
+       Streaming Tick 4...
+       END_MARK_1793745554270_555__0__
+       $
+       [Up/Down: scroll; PageUp/PageDown: page]
+       [exit status: 0]
+       
+       
+       
+       
+       
+       
+       
+       
+       scenario: repl_lavinmq_spec_13311
+       stage: streaming, completion, and Ctrl+G view toggling
+       state home: /tmp/tmux-repl-lavinmq-13311
+       worker pid file: 13401
+       ready pid files:
+         /tmp/tmux-repl-lavinmq-13311/tmux-repl/repl_lavinmq_spec_13311/input.pid: 13335
+         /tmp/tmux-repl-lavinmq-13311/tmux-repl/repl_lavinmq_spec_13311/worker.pid: 13401
+         /tmp/tmux-repl-lavinmq-13311/tmux-repl/repl_lavinmq_spec_13311/output.pid: 13440
+       input pane contents:
+       $:003> :prev
+       $:004> :next
+       $:005> :list
+         #1: printf 'FIRST_REPL_OUTPUT\n'
+       * #2: printf 'SECOND_REPL_OUTPUT\n'
+       $:006> :help
+       :select ID  Show the output associated
+       with an input.
+       :prev       Select the previous input.
+       :next       Select the next input.
+       :list       List submitted inputs.
+       Ctrl+G      Toggle stripped/raw output
+       from either pane.
+       Ctrl+Up     Select the previous input.
+       Ctrl+Down   Select the next input.
+       Alt+K       Also select the previous in
+       put.
+       Alt+J       Also select the next input.
+       $:007> :select 1
+       $:008> for i in $(seq 1 4); do echo "St
+       reaming Tick $i..." && sleep 0.2; done
+       [input #3] submitted. Use :select ID, :
+       prev, :next, :list, or :help.
+       $:009>
+       output pane contents:
+       INPUT #3 [STRIPPED; Ctrl+G toggles view]
+       for i in $(seq 1 4); do echo "Streaming
+       Tick $i..." && sleep 0.2; done
+       ────────────────────────────────────────
+       Streaming Tick 1...
+       Streaming Tick 2...
+       Streaming Tick 3...
+       Streaming Tick 4...
+       [Up/Down: scroll; PageUp/PageDown: page]
+       [exit status: 0]
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       
+       keyboard trace (last 30 rows):
+       pressed_at=2026-11-03T22:39:14.266263Z pane=input pid=13335 character='k' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266263Z pane=input pid=13335 character=' ' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266264Z pane=input pid=13335 character='$' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266264Z pane=input pid=13335 character='i' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266265Z pane=input pid=13335 character='.' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266265Z pane=input pid=13335 character='.' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266266Z pane=input pid=13335 character='.' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266266Z pane=input pid=13335 character='"' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266267Z pane=input pid=13335 character=' ' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266267Z pane=input pid=13335 character='&' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266268Z pane=input pid=13335 character='&' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266268Z pane=input pid=13335 character=' ' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266268Z pane=input pid=13335 character='s' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266269Z pane=input pid=13335 character='l' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266269Z pane=input pid=13335 character='e' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266270Z pane=input pid=13335 character='e' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266270Z pane=input pid=13335 character='p' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266271Z pane=input pid=13335 character=' ' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266271Z pane=input pid=13335 character='0' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266272Z pane=input pid=13335 character='.' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266272Z pane=input pid=13335 character='2' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266273Z pane=input pid=13335 character=';' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266278Z pane=input pid=13335 character=' ' action=reply_input elapsed_since_previous_ms=0.006 result=handled_by_replypressed_at=2026-11-03T22:39:14.266279Z pane=input pid=13335 character='d' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266279Z pane=input pid=13335 character='o' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266279Z pane=input pid=13335 character='n' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.266280Z pane=input pid=13335 character='e' action=reply_input elapsed_since_previous_ms=0.0 result=handled_by_replypressed_at=2026-11-03T22:39:14.269778Z pane=input pid=13335 character='\n' action=SubmitInput elapsed_since_previous_ms=3.498 result=handled_by_replypressed_at=2026-11-03T22:39:15.117710Z pane=input pid=13335 character='\a' action=ToggleOutputView elapsed_since_previous_ms=847.932 result=publishedpressed_at=2026-11-03T22:39:15.128560Z pane=output pid=13440 character='\a' action=ToggleOutputView elapsed_since_previous_ms=first result=published
+       tmux list-sessions (success: true):
+       repl_lavinmq_spec_13311: 1 windows (created Wed Nov  4 00:39:13 2026)
+       repl_path_bootstrap_13311: 1 windows (created Wed Nov  4 00:39:13 2026)
+       command stream messages: 3
+       event stream messages: 33 (Exception)
+         from spec/tmux_repl/session/lavinmq_process/Diagnostics.cr:68:7 in 'fail_with_diagnostics'
+         from spec/tmux_repl/session/lavinmq_process/Diagnostics.cr:129:7 in 'expect_output_without'
+         from spec/tmux_repl/session/lavinmq_process/Streaming.cr:91:7 in 'expect_stripped_output'
+         from spec/tmux_repl/session/lavinmq_process/Streaming.cr:20:7 in 'verify_streaming_and_toggle'
+         from spec/tmux_repl/session/lavinmq_process/Scenario.class.cr:44:9 in 'run'
+         from spec/tmux_repl/session/lavinmq_process_spec.cr:6:5 in '->'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/spec/example.cr:50:13 in 'internal_run'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/spec/example.cr:38:16 in 'run'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/spec/context.cr:20:23 in 'internal_run'
+         from ?? in 'run'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/spec/context.cr:20:23 in 'internal_run'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/spec/context.cr:173:7 in 'run'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/spec/dsl.cr:219:7 in 'execute_examples'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/spec/dsl.cr:194:13 in '->'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/crystal/at_exit_handlers.cr:26:17 in 'run'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/crystal/main.cr:108:14 in 'exit'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/crystal/main.cr:94:5 in 'main'
+         from /home/om/.local/share/mise/installs/crystal/1.22.0/share/crystal/src/crystal/system/unix/main.cr:9:3 in 'main'
+         from /lib/x86_64-linux-gnu/libc.so.6 in '??'
+         from /lib/x86_64-linux-gnu/libc.so.6 in '__libc_start_main'
+         from /home/om/.cache/crystal/crystal-run-spec.tmp in '_start'
+       
+
+Finished in 4.78 seconds
+45 examples, 0 failures, 1 errors, 0 pending
+
+Failed examples:
+
+crystal spec spec/tmux_repl/session/lavinmq_process_spec.cr:5 # LavinMQ-backed REPL processes keeps input history and streams, strips, and toggles command output
