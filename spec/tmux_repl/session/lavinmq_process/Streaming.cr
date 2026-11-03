@@ -6,19 +6,19 @@ module LavinMQProcess
       @stage = "submit streaming command"
       input_pane.send_keys(command, literal: true)
 
-      # The transcript is raw while the command is running.
-      @stage = "observe raw streamed output"
+      # The transcript is streamed while the command is running.
+      @stage = "observe streaming output"
       expect_output("Streaming Tick 1...", "START_MARK_", "END_MARK_", timeout: 3.seconds)
 
-      # Completion replaces that transcript with the stripped PTY result.
+      # Completion replaces the transcript with the stripped PTY result.
       expect_stripped_output
 
       # Ctrl+G from Input toggles to raw; the same key in Output toggles back.
       @stage = "toggle output to raw from the input pane"
       toggle_view_from(input_pane)
 
-      @stage = "verify raw output after input-pane toggle"
-      expect_output("START_MARK_", "END_MARK_", timeout: 2.seconds)
+      @stage = "wait for raw output mode after input-pane toggle"
+      expect_raw_output
 
       @stage = "toggle output to stripped from the output pane"
       toggle_view_from(output_pane)
@@ -102,8 +102,16 @@ module LavinMQProcess
       )
     end
 
+    private def expect_raw_output : Nil
+      expect_output("[RAW; Ctrl+G toggles view]", timeout: 2.seconds)
+      expect_output("START_MARK_", "END_MARK_", timeout: 2.seconds)
+    end
+
     private def expect_stripped_output : Nil
-      @stage = "wait for stripped command output"
+      @stage = "wait for stripped output mode"
+      expect_output("[STRIPPED; Ctrl+G toggles view]", timeout: 2.seconds)
+
+      @stage = "verify stripped command output"
       expect_output("Streaming Tick 1...", "Streaming Tick 4...", "[exit status: 0]", timeout: 2.seconds)
 
       @stage = "assert stripped output excludes START_MARK_"
