@@ -5,13 +5,22 @@ def update(event : JSON::Any) : Nil
 
     case event["type"].as_s
     when "input"
+      @scroll_offset = 0 if @selected_sequence != sequence
       @inputs[sequence] = event["command"].as_s
       @selected_sequence = sequence
     when "select"
-      @selected_sequence = sequence if @inputs.has_key?(sequence)
+      if @inputs.has_key?(sequence) && @selected_sequence != sequence
+        @selected_sequence = sequence
+        @scroll_offset = 0
+      end
     when "output"
       chunk = event["chunk"].as_s
-      @outputs[sequence] = @outputs.fetch(sequence, "") + chunk
+      previous = @outputs.fetch(sequence, "")
+      updated = previous + chunk
+      if sequence == @selected_sequence && @scroll_offset > 0 && !@statuses.has_key?(sequence)
+        @scroll_offset += output_lines(updated).size - output_lines(previous).size
+      end
+      @outputs[sequence] = updated
     when "complete"
       @statuses[sequence] = event["status"].as_i64.to_i32
       if clean_output = event.as_h["clean_output"]?

@@ -60,14 +60,15 @@ ID. Use these controls in the left pane to select which input is shown on the ri
     :help       Show these controls
 
 Alt+K/J are handled only when tmux passes the chords through to the input pane.
-The `ch1c0t/tmux.pane_movements` executables forward them automatically when
-the foreground command is `tmux.repl.input`; custom bindings must do the same.
+The ch1c0t/tmux.pane_movements executables forward them automatically when the
+foreground command is tmux.repl.input; custom bindings must do the same.
 
 The output pane streams the raw PTY transcript while a command is running, then
 switches automatically to the stripped command output when its exit status is
-available. Press Ctrl+G in either the Input or Output pane to toggle between
-stripped and raw transcript views. The same shortcut works in both panes, and
-the selected view remains active until toggled again.
+available. When the output is taller than the pane, use Up/Down to scroll one
+line and PageUp/PageDown to scroll one page. The command header and exit status
+remain visible while navigating. Press Ctrl+G in either the Input or Output pane
+to toggle between stripped and raw transcript views.
 
 ## Tmux REPL library and DSL
 
@@ -126,6 +127,5 @@ Start a new session with timing diagnostics enabled:
 Run a few commands, including the first one, then inspect
 $XDG_STATE_HOME/tmux-repl/latency-debug/timing.log (or
 $HOME/.local/state/tmux-repl/latency-debug/timing.log when XDG_STATE_HOME is unset).
-The trace separates input publication, worker delivery, PTY execution,
-output-event publication, and output-pane rendering.
+The trace separates input publication, worker delivery, PTY execution, output-event publication, and output-pane rendering.
 Tracing is disabled by default.

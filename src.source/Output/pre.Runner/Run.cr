@@ -29,7 +29,11 @@ def run : Nil
       handle_message(message, view)
     end
 
-    dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue)
+    on_action = ->(action : TmuxREPL::Keyboard::Action) do
+      view.render if view.scroll(action)
+      nil
+    end
+    dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue, on_action)
     dispatcher.start
 
     view.render

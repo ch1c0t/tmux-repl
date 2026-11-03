@@ -1,6 +1,9 @@
-# Draw the selected command, streaming transcript, or completed output.
-def render(io : IO = STDOUT) : Nil
+# Draw a fixed header and status around a scrollable output viewport.
+def render(io : IO = STDOUT, height : Int32? = nil) : Nil
   @mutex.synchronize do
+    screen_height = height || terminal_height
+    screen_height = 1 if screen_height < 1
+
     io.print "\e[H\e[2J"
     io.flush
 
@@ -27,9 +30,11 @@ def render(io : IO = STDOUT) : Nil
     end
 
     toggle_key = TmuxREPL::Keyboard.label_for(TmuxREPL::Keyboard::Action::ToggleOutputView)
-    io.puts "INPUT ##{selected} [#{mode_label}; #{toggle_key} toggles view]"
-    io.puts command
-    io.puts "─" * 40
+    header = [
+      "INPUT ##{selected} [#{mode_label}; #{toggle_key} toggles view]",
+      *output_lines(command),
+      "─" * 40,
+    ]
 
     displayed_output = if show_raw
       @outputs[selected]?
@@ -37,16 +42,39 @@ def render(io : IO = STDOUT) : Nil
       clean_output
     end
 
-    if output = displayed_output
-      io.print output
-      io.puts unless output.ends_with?("\n") || output.empty?
+    body = if output = displayed_output
+      output_lines(output)
     elsif !completed
-      io.puts "(running...)"
+      ["(running...)"]
+    else
+      [] of String
     end
 
-    if status = @statuses[selected]?
-      io.puts "[exit status: #{status}]"
+    footer = ["[Up/Down: scroll; PageUp/PageDown: page]"]
+    footer << "[exit status: #{@statuses[selected]}]" if status = @statuses[selected]?
+
+    @body_height = screen_height - header.size - footer.size
+    @body_height = 1 if @body_height < 1
+    @scrollable_lines = body.size
+
+    max_offset = @scrollable_lines - @body_height
+    max_offset = 0 if max_offset < 0
+    @scroll_offset = 0 if @scroll_offset < 0
+    @scroll_offset = max_offset if @scroll_offset > max_offset
+
+    visible_end = @scrollable_lines - @scroll_offset
+    visible_start = visible_end - @body_height
+    visible_start = 0 if visible_start < 0
+
+    header.each { |line| io.puts line }
+
+    index = visible_start
+    while index < visible_end
+      io.puts body[index]
+      index += 1
     end
+
+    footer.each { |line| io.puts line }
     io.flush
   end
 end

@@ -18,7 +18,25 @@ module LavinMQProcess
 
       toggle_view_from(output_pane)
       expect_stripped_output
+      verify_output_scrolling
       verify_keyboard_trace
+    end
+
+    private def verify_output_scrolling : Nil
+      command = %(for i in $(seq 1 60); do printf 'SCROLL_LINE_%02d\\n' "$i"; done)
+      input_pane.send_keys(command, literal: true)
+      expect_output("SCROLL_LINE_60", "[exit status: 0]", timeout: 3.seconds)
+
+      # PageUp moves through output retained above the viewport.
+      4.times { output_pane.send_keys("PageUp", enter: false) }
+      expect_output("SCROLL_LINE_01")
+      expect_output_without("SCROLL_LINE_60")
+
+      # Arrows move one line; page keys move one viewport.
+      output_pane.send_keys("Down", enter: false)
+      expect_output("SCROLL_LINE_02")
+      4.times { output_pane.send_keys("PageDown", enter: false) }
+      expect_output("SCROLL_LINE_60")
     end
 
     private def toggle_view_from(pane : Tmux::Pane) : Nil
@@ -61,6 +79,10 @@ module LavinMQProcess
       expect_condition(
         content.includes?("key=Ctrl+Down") && content.includes?("action=SelectNext"),
         "Keyboard trace did not record Ctrl+Down input selection."
+      )
+      expect_condition(
+        content.includes?("key=PageUp") && content.includes?("action=ScrollPageUp"),
+        "Keyboard trace did not record output PageUp scrolling."
       )
     end
 

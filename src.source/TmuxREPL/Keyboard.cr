@@ -3,6 +3,10 @@ enum Action
   SelectPrevious
   SelectNext
   SubmitInput
+  ScrollUp
+  ScrollDown
+  ScrollPageUp
+  ScrollPageDown
 end
 
 struct Binding
@@ -50,12 +54,34 @@ SEQUENCE_BINDINGS = [
   SequenceBinding.new("Alt+J", Action::SelectNext, "Alt+J", "Also select the next input."),
 ]
 
+# These escape sequences are only consumed by the output-pane keyboard reader.
+OUTPUT_SEQUENCE_BINDINGS = {
+  "\e[A"  => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
+  "\e[B"  => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
+  "\e[5~" => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
+  "\e[6~" => SequenceBinding.new("PageDown", Action::ScrollPageDown, "PageDown", "Scroll output down one page."),
+}
+
 def self.binding_for(key : Char) : Binding?
   BINDINGS.find { |binding| binding.key == key }
 end
 
 def self.sequence_binding_for(key : String) : SequenceBinding?
   SEQUENCE_BINDINGS.find { |binding| binding.key == key }
+end
+
+def self.output_sequence_binding_for(sequence : String) : SequenceBinding?
+  OUTPUT_SEQUENCE_BINDINGS[sequence]?
+end
+
+def self.output_sequence_match(input : String) : Tuple(String, SequenceBinding)?
+  OUTPUT_SEQUENCE_BINDINGS.each do |sequence, binding|
+    return {sequence, binding} if input.starts_with?(sequence)
+  end
+end
+
+def self.output_sequence_prefix?(input : String) : Bool
+  OUTPUT_SEQUENCE_BINDINGS.keys.any? { |sequence| sequence.starts_with?(input) }
 end
 
 def self.action_for(key : Char) : Action?

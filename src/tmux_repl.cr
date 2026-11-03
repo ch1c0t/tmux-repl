@@ -257,6 +257,10 @@ module TmuxREPL
       SelectPrevious
       SelectNext
       SubmitInput
+      ScrollUp
+      ScrollDown
+      ScrollPageUp
+      ScrollPageDown
     end
     
     struct Binding
@@ -304,12 +308,34 @@ module TmuxREPL
       SequenceBinding.new("Alt+J", Action::SelectNext, "Alt+J", "Also select the next input."),
     ]
     
+    # These escape sequences are only consumed by the output-pane keyboard reader.
+    OUTPUT_SEQUENCE_BINDINGS = {
+      "\e[A"  => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
+      "\e[B"  => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
+      "\e[5~" => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
+      "\e[6~" => SequenceBinding.new("PageDown", Action::ScrollPageDown, "PageDown", "Scroll output down one page."),
+    }
+    
     def self.binding_for(key : Char) : Binding?
       BINDINGS.find { |binding| binding.key == key }
     end
     
     def self.sequence_binding_for(key : String) : SequenceBinding?
       SEQUENCE_BINDINGS.find { |binding| binding.key == key }
+    end
+    
+    def self.output_sequence_binding_for(sequence : String) : SequenceBinding?
+      OUTPUT_SEQUENCE_BINDINGS[sequence]?
+    end
+    
+    def self.output_sequence_match(input : String) : Tuple(String, SequenceBinding)?
+      OUTPUT_SEQUENCE_BINDINGS.each do |sequence, binding|
+        return {sequence, binding} if input.starts_with?(sequence)
+      end
+    end
+    
+    def self.output_sequence_prefix?(input : String) : Bool
+      OUTPUT_SEQUENCE_BINDINGS.keys.any? { |sequence| sequence.starts_with?(input) }
     end
     
     def self.action_for(key : Char) : Action?
@@ -331,7 +357,7 @@ module TmuxREPL
     def self.help_text : String
       (BINDINGS.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
     end
-  
+
     class InputIO(T) < IO
       @source_buffer = Bytes.new(8192)
       @read_buffer = Bytes.new(8192 * 3)
@@ -599,6 +625,7 @@ module TmuxREPL
       @state_mutex : Sync::Mutex
       @finished : Channel(Nil)
       @trace : Trace
+      @on_action : Proc(Action, Nil)?
       @started = false
       @stopped = false
       @joined = false
@@ -606,7 +633,8 @@ module TmuxREPL
       def initialize(
         @session_name : String,
         @pane : String,
-        @events : AMQP::Client::Queue
+        @events : AMQP::Client::Queue,
+        @on_action : Proc(Action, Nil)? = nil
       )
         @queue = Queue(KeyPress).new
         @state_mutex = Sync::Mutex.new
@@ -696,6 +724,9 @@ module TmuxREPL
                    end
                  when Action::SelectPrevious, Action::SelectNext
                    "handled_by_input_reader"
+                 when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown
+                   @on_action.try &.call(action.not_nil!)
+                   "handled_by_output_view"
                  when Action::SubmitInput
                    "handled_by_reply"
                  else

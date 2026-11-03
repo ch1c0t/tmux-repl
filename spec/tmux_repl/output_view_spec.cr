@@ -81,4 +81,34 @@ describe Output::View do
     output.to_s.should contain("first")
     output.to_s.should_not contain("INPUT #2")
   end
+
+  it "scrolls output by line and by page while keeping the header and status visible" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"generate output"})))
+    output_lines = (1..10).map { |number| "OUTPUT_LINE_#{number.to_s.rjust(2, '0')}" }.join("\n")
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => output_lines}.to_json))
+
+    initial = IO::Memory.new
+    view.render(initial, height: 8)
+    initial.to_s.should contain("OUTPUT_LINE_10")
+    initial.to_s.should_not contain("OUTPUT_LINE_01")
+
+    view.scroll(TmuxREPL::Keyboard::Action::ScrollPageUp).should be_true
+    earlier = IO::Memory.new
+    view.render(earlier, height: 8)
+    earlier.to_s.should contain("OUTPUT_LINE_06")
+    earlier.to_s.should_not contain("OUTPUT_LINE_10")
+    earlier.to_s.should contain("INPUT #1")
+    earlier.to_s.should contain("[exit status: 0]")
+
+    view.scroll(TmuxREPL::Keyboard::Action::ScrollUp).should be_true
+    higher = IO::Memory.new
+    view.render(higher, height: 8)
+    higher.to_s.should contain("OUTPUT_LINE_05")
+
+    2.times { view.scroll(TmuxREPL::Keyboard::Action::ScrollPageDown) }
+    latest = IO::Memory.new
+    view.render(latest, height: 8)
+    latest.to_s.should contain("OUTPUT_LINE_10")
+  end
 end

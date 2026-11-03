@@ -2,6 +2,7 @@
 @state_mutex : Sync::Mutex
 @finished : Channel(Nil)
 @trace : Trace
+@on_action : Proc(Action, Nil)?
 @started = false
 @stopped = false
 @joined = false
@@ -9,7 +10,8 @@
 def initialize(
   @session_name : String,
   @pane : String,
-  @events : AMQP::Client::Queue
+  @events : AMQP::Client::Queue,
+  @on_action : Proc(Action, Nil)? = nil
 )
   @queue = Queue(KeyPress).new
   @state_mutex = Sync::Mutex.new
@@ -42,7 +44,7 @@ def enqueue(character : Char) : Action?
   action
 end
 
-# Queue a parsed Reply key sequence after its selection callback has run.
+# Queue a parsed key sequence after its handler has decided what to do with it.
 def enqueue(binding : SequenceBinding) : Action
   press = KeyPress.new(binding.label, binding.action)
   @state_mutex.synchronize do
@@ -99,6 +101,9 @@ private def dispatch(press : KeyPress) : Nil
              end
            when Action::SelectPrevious, Action::SelectNext
              "handled_by_input_reader"
+           when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown
+             @on_action.try &.call(action.not_nil!)
+             "handled_by_output_view"
            when Action::SubmitInput
              "handled_by_reply"
            else

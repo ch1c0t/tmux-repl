@@ -27,6 +27,21 @@ describe TmuxREPL::Keyboard do
     TmuxREPL::Keyboard.label_for(following.action).should eq("Ctrl+Down")
   end
 
+  it "maps output arrow and page keys to scroll actions" do
+    TmuxREPL::Keyboard.output_sequence_binding_for("\e[A").not_nil!.action.should eq(
+      TmuxREPL::Keyboard::Action::ScrollUp
+    )
+    TmuxREPL::Keyboard.output_sequence_binding_for("\e[B").not_nil!.action.should eq(
+      TmuxREPL::Keyboard::Action::ScrollDown
+    )
+    TmuxREPL::Keyboard.output_sequence_binding_for("\e[5~").not_nil!.action.should eq(
+      TmuxREPL::Keyboard::Action::ScrollPageUp
+    )
+    TmuxREPL::Keyboard.output_sequence_binding_for("\e[6~").not_nil!.action.should eq(
+      TmuxREPL::Keyboard::Action::ScrollPageDown
+    )
+  end
+
   it "does not assign actions to unbound keys" do
     TmuxREPL::Keyboard.action_for('x').should be_nil
     TmuxREPL::Keyboard.sequence_binding_for("Alt+Up").should be_nil

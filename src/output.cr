@@ -107,10 +107,18 @@ module Output
         return unless terminal_mode.enable
       
         spawn do
+          pending = [] of UInt8
+          buffer = Bytes.new(128)
+      
           begin
-            while key = STDIN.read_char
-              dispatcher.enqueue(key)
+            loop do
+              count = STDIN.read(buffer)
+              break if count == 0
+      
+              count.times { |index| pending << buffer[index] }
+              dispatch_keyboard_input(pending, dispatcher)
             end
+            dispatch_keyboard_input(pending, dispatcher, flush: true)
           rescue IO::Error
             # The pane may close while the keyboard reader is waiting.
           ensure
@@ -118,6 +126,31 @@ module Output
           end
         end
       end
+      
+      # Keep incomplete escape-sequence prefixes until the next read. This handles
+      # arrow and page-key sequences even when the PTY splits them across reads.
+      private def dispatch_keyboard_input(
+        pending : Array(UInt8),
+        dispatcher : TmuxREPL::Keyboard::Dispatcher,
+        flush : Bool = false
+      ) : Nil
+        until pending.empty?
+          input = String.build do |io|
+            pending.each { |byte| io.write_byte(byte) }
+          end
+      
+          if match = TmuxREPL::Keyboard.output_sequence_match(input)
+            sequence, binding = match
+            sequence.bytesize.times { pending.shift }
+            dispatcher.enqueue(binding)
+          elsif !flush && TmuxREPL::Keyboard.output_sequence_prefix?(input)
+            break
+          else
+            dispatcher.enqueue(pending.shift.chr)
+          end
+        end
+      end
+
     end
   
     module Run
@@ -152,7 +185,11 @@ module Output
             handle_message(message, view)
           end
       
-          dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue)
+          on_action = ->(action : TmuxREPL::Keyboard::Action) do
+            view.render if view.scroll(action)
+            nil
+          end
+          dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue, on_action)
           dispatcher.start
       
           view.render
@@ -172,8 +209,8 @@ module Output
           end
         end
       end
+
     end
-  
     getter session_name : String
     
     def initialize(@session_name : String)
@@ -187,9 +224,12 @@ module Output
 
   class View
     module Render
-      # Draw the selected command, streaming transcript, or completed output.
-      def render(io : IO = STDOUT) : Nil
+      # Draw a fixed header and status around a scrollable output viewport.
+      def render(io : IO = STDOUT, height : Int32? = nil) : Nil
         @mutex.synchronize do
+          screen_height = height || terminal_height
+          screen_height = 1 if screen_height < 1
+      
           io.print "\e[H\e[2J"
           io.flush
       
@@ -216,9 +256,11 @@ module Output
           end
       
           toggle_key = TmuxREPL::Keyboard.label_for(TmuxREPL::Keyboard::Action::ToggleOutputView)
-          io.puts "INPUT ##{selected} [#{mode_label}; #{toggle_key} toggles view]"
-          io.puts command
-          io.puts "─" * 40
+          header = [
+            "INPUT ##{selected} [#{mode_label}; #{toggle_key} toggles view]",
+            *output_lines(command),
+            "─" * 40,
+          ]
       
           displayed_output = if show_raw
             @outputs[selected]?
@@ -226,19 +268,43 @@ module Output
             clean_output
           end
       
-          if output = displayed_output
-            io.print output
-            io.puts unless output.ends_with?("\n") || output.empty?
+          body = if output = displayed_output
+            output_lines(output)
           elsif !completed
-            io.puts "(running...)"
+            ["(running...)"]
+          else
+            [] of String
           end
       
-          if status = @statuses[selected]?
-            io.puts "[exit status: #{status}]"
+          footer = ["[Up/Down: scroll; PageUp/PageDown: page]"]
+          footer << "[exit status: #{@statuses[selected]}]" if status = @statuses[selected]?
+      
+          @body_height = screen_height - header.size - footer.size
+          @body_height = 1 if @body_height < 1
+          @scrollable_lines = body.size
+      
+          max_offset = @scrollable_lines - @body_height
+          max_offset = 0 if max_offset < 0
+          @scroll_offset = 0 if @scroll_offset < 0
+          @scroll_offset = max_offset if @scroll_offset > max_offset
+      
+          visible_end = @scrollable_lines - @scroll_offset
+          visible_start = visible_end - @body_height
+          visible_start = 0 if visible_start < 0
+      
+          header.each { |line| io.puts line }
+      
+          index = visible_start
+          while index < visible_end
+            io.puts body[index]
+            index += 1
           end
+      
+          footer.each { |line| io.puts line }
           io.flush
         end
       end
+
     end
   
     module Update
@@ -249,13 +315,22 @@ module Output
       
           case event["type"].as_s
           when "input"
+            @scroll_offset = 0 if @selected_sequence != sequence
             @inputs[sequence] = event["command"].as_s
             @selected_sequence = sequence
           when "select"
-            @selected_sequence = sequence if @inputs.has_key?(sequence)
+            if @inputs.has_key?(sequence) && @selected_sequence != sequence
+              @selected_sequence = sequence
+              @scroll_offset = 0
+            end
           when "output"
             chunk = event["chunk"].as_s
-            @outputs[sequence] = @outputs.fetch(sequence, "") + chunk
+            previous = @outputs.fetch(sequence, "")
+            updated = previous + chunk
+            if sequence == @selected_sequence && @scroll_offset > 0 && !@statuses.has_key?(sequence)
+              @scroll_offset += output_lines(updated).size - output_lines(previous).size
+            end
+            @outputs[sequence] = updated
           when "complete"
             @statuses[sequence] = event["status"].as_i64.to_i32
             if clean_output = event.as_h["clean_output"]?
@@ -266,6 +341,7 @@ module Output
           end
         end
       end
+
     end
   
     @inputs = {} of UInt64 => String
@@ -274,6 +350,11 @@ module Output
     @statuses = {} of UInt64 => Int32
     @selected_sequence : UInt64?
     @raw_view = false
+    @scroll_offset = 0
+    @body_height = 1
+    @scrollable_lines = 0
+    @cached_terminal_height = 24
+    @terminal_height_checked_at : Time::Instant?
     @mutex = Sync::Mutex.new
     
     def initialize
@@ -287,7 +368,55 @@ module Output
       end
     end
     
+    # Move the output viewport without moving the pinned command header or status.
+    def scroll(action : TmuxREPL::Keyboard::Action) : Bool
+      @mutex.synchronize do
+        previous_offset = @scroll_offset
+        page_step = @body_height - 1
+        page_step = 1 if page_step < 1
+    
+        case action
+        when TmuxREPL::Keyboard::Action::ScrollUp
+          @scroll_offset += 1
+        when TmuxREPL::Keyboard::Action::ScrollDown
+          @scroll_offset -= 1
+        when TmuxREPL::Keyboard::Action::ScrollPageUp
+          @scroll_offset += page_step
+        when TmuxREPL::Keyboard::Action::ScrollPageDown
+          @scroll_offset -= page_step
+        end
+    
+        max_offset = @scrollable_lines - @body_height
+        max_offset = 0 if max_offset < 0
+        @scroll_offset = 0 if @scroll_offset < 0
+        @scroll_offset = max_offset if @scroll_offset > max_offset
+    
+        @scroll_offset != previous_offset
+      end
+    end
+    
+    private def output_lines(text : String) : Array(String)
+      normalized = text.gsub("\r\n", "\n").gsub("\r", "\n")
+      return [] of String if normalized.empty?
+    
+      lines = normalized.split('\n', false)
+      lines.pop if normalized.ends_with?('\n')
+      lines
+    end
+    
+    private def terminal_height : Int32
+      if checked_at = @terminal_height_checked_at
+        return @cached_terminal_height if Time.instant - checked_at < 250.milliseconds
+      end
+    
+      @terminal_height_checked_at = Time.instant
+      @cached_terminal_height = Tmux::Pane.from_env.height
+    rescue
+      @cached_terminal_height = ENV["LINES"]?.try(&.to_i?) || 24
+    end
+    
     include Update
     include Render
+
   end
 end
