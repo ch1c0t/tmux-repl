@@ -46,20 +46,42 @@ BINDINGS = [
   ),
 ]
 
-# Ctrl+Up/Down are the primary bindings. Alt+K/J are aliases.
+# Ctrl+Up/Down are the primary input-selection bindings. Alt+K/J are aliases.
 SEQUENCE_BINDINGS = [
   SequenceBinding.new("Ctrl+Up", Action::SelectPrevious, "Ctrl+Up", "Select the previous input."),
   SequenceBinding.new("Ctrl+Down", Action::SelectNext, "Ctrl+Down", "Select the next input."),
   SequenceBinding.new("Alt+K", Action::SelectPrevious, "Alt+K", "Also select the previous input."),
   SequenceBinding.new("Alt+J", Action::SelectNext, "Alt+J", "Also select the next input."),
+  SequenceBinding.new("Alt+Up", Action::ScrollUp, "Alt+Up", "Scroll output up one line from either pane."),
+  SequenceBinding.new("Alt+Down", Action::ScrollDown, "Alt+Down", "Scroll output down one line from either pane."),
+  SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page from either pane."),
+  SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page from either pane."),
 ]
 
-# These escape sequences are only consumed by the output-pane keyboard reader.
+# xterm modifier parameter 3 represents Alt combined with the key.
+INPUT_SCROLL_SEQUENCES = {
+  "\e[1;3A" => "Alt+Up",
+  "\e[1;3B" => "Alt+Down",
+  "\e[5;3~" => "Alt+PageUp",
+  "\e[6;3~" => "Alt+PageDown",
+}
+
+INPUT_SEQUENCE_STRINGS = [
+  "\ek", "\ej", "\e[107;3u", "\e[106;3u",
+  "\e[1;5A", "\e[1;5B",
+  "\e[1;3A", "\e[1;3B", "\e[5;3~", "\e[6;3~",
+]
+
+# Unmodified keys and their Alt-modified equivalents are accepted in Output.
 OUTPUT_SEQUENCE_BINDINGS = {
-  "\e[A"  => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
-  "\e[B"  => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
-  "\e[5~" => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
-  "\e[6~" => SequenceBinding.new("PageDown", Action::ScrollPageDown, "PageDown", "Scroll output down one page."),
+  "\e[A"    => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
+  "\e[B"    => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
+  "\e[5~"   => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
+  "\e[6~"   => SequenceBinding.new("PageDown", Action::ScrollPageDown, "PageDown", "Scroll output down one page."),
+  "\e[1;3A" => SequenceBinding.new("Alt+Up", Action::ScrollUp, "Alt+Up", "Scroll output up one line."),
+  "\e[1;3B" => SequenceBinding.new("Alt+Down", Action::ScrollDown, "Alt+Down", "Scroll output down one line."),
+  "\e[5;3~" => SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page."),
+  "\e[6;3~" => SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page."),
 }
 
 def self.binding_for(key : Char) : Binding?

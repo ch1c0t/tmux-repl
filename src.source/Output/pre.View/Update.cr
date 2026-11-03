@@ -28,6 +28,10 @@ def update(event : JSON::Any) : Nil
       end
     when "toggle_view"
       @raw_view = !@raw_view
+    when "scroll"
+      if action = scroll_action(event["action"].as_s)
+        scroll_locked(action)
+      end
     end
   end
 end

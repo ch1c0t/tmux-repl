@@ -9,7 +9,7 @@ reply and crystal.pty are never imported by the same executable.
 
 ## Executable roles
 
-- tmux.repl creates, activates, and stops a named two-pane session.
+- tmux.repl creates, activates, and stops a named Tmux session.
 - tmux.repl.input reads and publishes commands in the left pane.
 - tmux.repl.output renders the selected input and its associated output.
 - tmux.repl.worker executes commands through PTY::Session and publishes output.
@@ -63,12 +63,11 @@ Alt+K/J are handled only when tmux passes the chords through to the input pane.
 The ch1c0t/tmux.pane_movements executables forward them automatically when the
 foreground command is tmux.repl.input; custom bindings must do the same.
 
-The output pane streams the raw PTY transcript while a command is running, then
-switches automatically to the stripped command output when its exit status is
-available. When the output is taller than the pane, use Up/Down to scroll one
-line and PageUp/PageDown to scroll one page. The command header and exit status
-remain visible while navigating. Press Ctrl+G in either the Input or Output pane
-to toggle between stripped and raw transcript views.
+Scroll the displayed output from either pane with Alt+Up/Alt+Down (one line) or
+Alt+PageUp/Alt+PageDown (one page). In the output pane, the unmodified Up/Down
+and PageUp/PageDown keys work as well. The command header and exit status remain
+visible while navigating. Press Ctrl+G in either pane to toggle between stripped
+and raw transcript views.
 
 ## Tmux REPL library and DSL
 

@@ -1,5 +1,6 @@
 @source_buffer = Bytes.new(8192)
 @read_buffer = Bytes.new(8192 * 3)
+@pending_source = [] of UInt8
 @source_size = 0
 @source_offset = 0
 @navigation_bindings = [] of SequenceBinding
@@ -14,8 +15,8 @@ end
 def read(slice : Bytes) : Int32
   return 0 if slice.empty?
 
-  refill if @source_offset >= @source_size
-  return 0 if @eof
+  refill if @source_offset >= @source_size && !@eof
+  return 0 if @source_offset >= @source_size
 
   available = @source_size - @source_offset
   count = bytes_before_line_ending(available)
@@ -29,8 +30,8 @@ def read(slice : Bytes) : Int32
   count
 end
 
-# Reply reports both native Ctrl arrows and translated Alt aliases through its
-# existing Ctrl+Up/Down callbacks. Keep the original binding for diagnostics.
+# Reply reports native Ctrl arrows and translated Alt+K/J through its existing
+# callbacks. Preserve the original binding so the dispatcher can trace the key.
 def take_navigation_binding(action : Action) : SequenceBinding?
   return if @navigation_bindings.empty?
 
@@ -64,61 +65,98 @@ def raw(& : self -> _)
   {% end %}
 end
 
+# Read until a complete input sequence or ordinary characters are available.
+# A trailing escape-sequence prefix is retained for the next OS read.
 private def refill : Nil
-  raw_size = @source.read(@source_buffer)
-  @source_offset = 0
-  @source_size = translate_navigation_sequences(raw_size)
-  @eof = raw_size == 0
+  loop do
+    raw_size = @source.read(@source_buffer)
+    raw_size.times { |index| @pending_source << @source_buffer[index] }
+
+    @source_offset = 0
+    @eof = raw_size == 0
+    @source_size = translate_navigation_sequences(@eof)
+    break if @source_size > 0 || @eof
+  end
 end
 
-# Translate Alt+K/J into the Ctrl+Up/Down sequences understood by Reply 0.4.
-# Both ESC-prefixed terminal input and Kitty CSI-u input are accepted.
-private def translate_navigation_sequences(raw_size : Int32) : Int32
+# Consume Alt scrolling locally in the input frontend, while translating the
+# existing Alt+K/J aliases into the Ctrl arrows understood by Reply 0.4.
+private def translate_navigation_sequences(eof : Bool) : Int32
   input_offset = 0
   output_size = 0
+  limit = @pending_source.size
 
-  while input_offset < raw_size
-    if sequence = alt_navigation_sequence(input_offset, raw_size)
+  while input_offset < limit
+    if sequence = input_scroll_sequence(input_offset, limit)
+      binding, input_size = sequence
+      @keyboard.try &.enqueue(binding)
+      input_offset += input_size
+    elsif sequence = alt_navigation_sequence(input_offset, limit)
       binding, input_size = sequence
       @navigation_bindings << binding
 
       translated = binding.action == Action::SelectPrevious ? "\e[1;5A" : "\e[1;5B"
       output_size += append_sequence(translated, output_size)
       input_offset += input_size
-    elsif binding = control_navigation_binding(input_offset, raw_size)
+    elsif binding = control_navigation_binding(input_offset, limit)
       @navigation_bindings << binding
-      sequence_size = "\e[1;5A".bytesize
-      @read_buffer[output_size, sequence_size].copy_from(@source_buffer[input_offset, sequence_size])
-      output_size += sequence_size
-      input_offset += sequence_size
+      translated = binding.action == Action::SelectPrevious ? "\e[1;5A" : "\e[1;5B"
+      output_size += append_sequence(translated, output_size)
+      input_offset += translated.bytesize
+    elsif !eof && incomplete_sequence_prefix?(input_offset, limit)
+      break
     else
-      @read_buffer[output_size] = @source_buffer[input_offset]
+      @read_buffer[output_size] = @pending_source[input_offset]
       output_size += 1
       input_offset += 1
     end
   end
 
+  @pending_source.shift(input_offset) if input_offset > 0
   output_size
 end
 
+private def input_scroll_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
+  TmuxREPL::Keyboard::INPUT_SCROLL_SEQUENCES.each do |sequence, label|
+    if matches?(@pending_source, offset, limit, sequence)
+      return {
+        TmuxREPL::Keyboard.sequence_binding_for(label).not_nil!,
+        sequence.bytesize,
+      }
+    end
+  end
+end
+
 private def alt_navigation_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
-  if matches?(@source_buffer, offset, limit, "\ek")
+  if matches?(@pending_source, offset, limit, "\ek")
     {TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!, 2}
-  elsif matches?(@source_buffer, offset, limit, "\ej")
+  elsif matches?(@pending_source, offset, limit, "\ej")
     {TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!, 2}
-  elsif matches?(@source_buffer, offset, limit, "\e[107;3u")
+  elsif matches?(@pending_source, offset, limit, "\e[107;3u")
     {TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!, 8}
-  elsif matches?(@source_buffer, offset, limit, "\e[106;3u")
+  elsif matches?(@pending_source, offset, limit, "\e[106;3u")
     {TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!, 8}
   end
 end
 
 private def control_navigation_binding(offset : Int32, limit : Int32) : SequenceBinding?
-  if matches?(@source_buffer, offset, limit, "\e[1;5A")
+  if matches?(@pending_source, offset, limit, "\e[1;5A")
     TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up")
-  elsif matches?(@source_buffer, offset, limit, "\e[1;5B")
+  elsif matches?(@pending_source, offset, limit, "\e[1;5B")
     TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down")
   end
+end
+
+private def incomplete_sequence_prefix?(offset : Int32, limit : Int32) : Bool
+  suffix = String.build do |io|
+    index = offset
+    while index < limit
+      io.write_byte(@pending_source[index])
+      index += 1
+    end
+  end
+
+  TmuxREPL::Keyboard::INPUT_SEQUENCE_STRINGS.any? { |sequence| sequence.starts_with?(suffix) }
 end
 
 private def append_sequence(sequence : String, offset : Int32) : Int32
@@ -127,7 +165,12 @@ private def append_sequence(sequence : String, offset : Int32) : Int32
   bytes.size
 end
 
-private def matches?(buffer : Bytes, offset : Int32, limit : Int32, sequence : String) : Bool
+private def matches?(
+  buffer : Array(UInt8),
+  offset : Int32,
+  limit : Int32,
+  sequence : String
+) : Bool
   bytes = sequence.to_slice
   return false if offset + bytes.size > limit
 
@@ -137,8 +180,8 @@ private def matches?(buffer : Bytes, offset : Int32, limit : Int32, sequence : S
   true
 end
 
-# Keep Enter and each navigation sequence in a separate read so Reply sees them
-# even when ordinary text or another key arrived in the same OS read.
+# Keep Enter and each Ctrl navigation sequence in a separate read so Reply can
+# parse them even when ordinary text or another key arrived in the same OS read.
 private def bytes_before_line_ending(available : Int32) : Int32
   available.times do |index|
     offset = @source_offset + index
@@ -158,8 +201,8 @@ end
 
 private def navigation_sequence_size(offset : Int32, limit : Int32) : Int32?
   sequence = "\e[1;5A"
-  return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
+  return sequence.bytesize if matches?(@read_buffer.to_a, offset, limit, sequence)
 
   sequence = "\e[1;5B"
-  return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
+  return sequence.bytesize if matches?(@read_buffer.to_a, offset, limit, sequence)
 end

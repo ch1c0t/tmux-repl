@@ -102,8 +102,20 @@ private def dispatch(press : KeyPress) : Nil
            when Action::SelectPrevious, Action::SelectNext
              "handled_by_input_reader"
            when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown
-             @on_action.try &.call(action.not_nil!)
-             "handled_by_output_view"
+             if @pane == "input"
+               begin
+                 TmuxREPL.publish_event(
+                   @events, "scroll", @session_name, 0_u64, action: action.not_nil!.to_s
+                 )
+                 "published"
+               rescue ex
+                 STDERR.puts "tmux.repl.input: failed to publish #{action}: #{ex.message}"
+                 "publish_failed"
+               end
+             else
+               @on_action.try &.call(action.not_nil!)
+               "handled_by_output_view"
+             end
            when Action::SubmitInput
              "handled_by_reply"
            else

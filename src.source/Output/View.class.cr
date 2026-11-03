@@ -24,28 +24,39 @@ end
 
 # Move the output viewport without moving the pinned command header or status.
 def scroll(action : TmuxREPL::Keyboard::Action) : Bool
-  @mutex.synchronize do
-    previous_offset = @scroll_offset
-    page_step = @body_height - 1
-    page_step = 1 if page_step < 1
+  @mutex.synchronize { scroll_locked(action) }
+end
 
-    case action
-    when TmuxREPL::Keyboard::Action::ScrollUp
-      @scroll_offset += 1
-    when TmuxREPL::Keyboard::Action::ScrollDown
-      @scroll_offset -= 1
-    when TmuxREPL::Keyboard::Action::ScrollPageUp
-      @scroll_offset += page_step
-    when TmuxREPL::Keyboard::Action::ScrollPageDown
-      @scroll_offset -= page_step
-    end
+private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
+  previous_offset = @scroll_offset
+  page_step = @body_height - 1
+  page_step = 1 if page_step < 1
 
-    max_offset = @scrollable_lines - @body_height
-    max_offset = 0 if max_offset < 0
-    @scroll_offset = 0 if @scroll_offset < 0
-    @scroll_offset = max_offset if @scroll_offset > max_offset
+  case action
+  when TmuxREPL::Keyboard::Action::ScrollUp
+    @scroll_offset += 1
+  when TmuxREPL::Keyboard::Action::ScrollDown
+    @scroll_offset -= 1
+  when TmuxREPL::Keyboard::Action::ScrollPageUp
+    @scroll_offset += page_step
+  when TmuxREPL::Keyboard::Action::ScrollPageDown
+    @scroll_offset -= page_step
+  end
 
-    @scroll_offset != previous_offset
+  max_offset = @scrollable_lines - @body_height
+  max_offset = 0 if max_offset < 0
+  @scroll_offset = 0 if @scroll_offset < 0
+  @scroll_offset = max_offset if @scroll_offset > max_offset
+
+  @scroll_offset != previous_offset
+end
+
+private def scroll_action(name : String) : TmuxREPL::Keyboard::Action?
+  case name
+  when "ScrollUp"       then TmuxREPL::Keyboard::Action::ScrollUp
+  when "ScrollDown"     then TmuxREPL::Keyboard::Action::ScrollDown
+  when "ScrollPageUp"   then TmuxREPL::Keyboard::Action::ScrollPageUp
+  when "ScrollPageDown" then TmuxREPL::Keyboard::Action::ScrollPageDown
   end
 end
 

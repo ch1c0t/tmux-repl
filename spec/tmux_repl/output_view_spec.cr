@@ -67,6 +67,29 @@ describe Output::View do
     stripped_again.to_s.should_not contain("START_MARK_1")
   end
 
+  it "handles scroll events published by the input pane" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"generate output"})))
+    output_lines = (1..10).map { |number| "OUTPUT_LINE_#{number.to_s.rjust(2, '0')}" }.join("\n")
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => output_lines}.to_json))
+
+    initial = IO::Memory.new
+    view.render(initial, height: 8)
+    initial.to_s.should contain("OUTPUT_LINE_10")
+    initial.to_s.should_not contain("OUTPUT_LINE_01")
+
+    view.update(JSON.parse(%({"type":"scroll","sequence":0,"action":"ScrollPageUp"})))
+    earlier = IO::Memory.new
+    view.render(earlier, height: 8)
+    earlier.to_s.should contain("OUTPUT_LINE_06")
+    earlier.to_s.should_not contain("OUTPUT_LINE_10")
+
+    view.update(JSON.parse(%({"type":"scroll","sequence":0,"action":"ScrollDown"})))
+    later = IO::Memory.new
+    view.render(later, height: 8)
+    later.to_s.should contain("OUTPUT_LINE_07")
+  end
+
   it "shows the selected input and ignores selection of an unknown input" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"first"})))

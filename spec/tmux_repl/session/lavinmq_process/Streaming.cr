@@ -37,19 +37,36 @@ module LavinMQProcess
       @stage = "wait for final scrolling output"
       expect_output("SCROLL_LINE_60", "[exit status: 0]", timeout: 3.seconds)
 
-      # PageUp moves through output retained above the viewport.
-      @stage = "scroll to the beginning of command output"
+      # The output pane accepts unmodified navigation keys.
+      @stage = "scroll up one page from the output pane"
       4.times { output_pane.send_keys("PageUp", enter: false) }
       expect_output("SCROLL_LINE_01")
       expect_output_without("SCROLL_LINE_60")
 
-      # Arrows move one line; page keys move one viewport.
-      @stage = "scroll down one line"
+      @stage = "scroll down one line from the output pane"
       output_pane.send_keys("Down", enter: false)
       expect_output("SCROLL_LINE_02")
 
-      @stage = "scroll back to the latest output"
+      @stage = "scroll back to the latest output from the output pane"
       4.times { output_pane.send_keys("PageDown", enter: false) }
+      expect_output("SCROLL_LINE_60")
+
+      # Alt-modified sequences work from the input pane without reaching Reply.
+      @stage = "scroll up one page from the input pane"
+      4.times { input_pane.send_keys("M-PageUp", enter: false) }
+      expect_output("SCROLL_LINE_01")
+      expect_output_without("SCROLL_LINE_60")
+
+      @stage = "scroll down one line from the input pane"
+      input_pane.send_keys("M-Down", enter: false)
+      expect_output("SCROLL_LINE_02")
+
+      @stage = "scroll up one line from the input pane"
+      input_pane.send_keys("M-Up", enter: false)
+      expect_output("SCROLL_LINE_01")
+
+      @stage = "scroll back to the latest output from the input pane"
+      4.times { input_pane.send_keys("M-PageDown", enter: false) }
       expect_output("SCROLL_LINE_60")
     end
 
@@ -99,6 +116,14 @@ module LavinMQProcess
       expect_condition(
         content.includes?("key=PageUp") && content.includes?("action=ScrollPageUp"),
         "Keyboard trace did not record output PageUp scrolling."
+      )
+      expect_condition(
+        content.includes?("key=Alt+PageUp") && content.includes?("action=ScrollPageUp"),
+        "Keyboard trace did not record input-pane Alt+PageUp scrolling."
+      )
+      expect_condition(
+        content.includes?("key=Alt+Down") && content.includes?("action=ScrollDown"),
+        "Keyboard trace did not record input-pane Alt+Down scrolling."
       )
     end
 

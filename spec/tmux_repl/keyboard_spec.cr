@@ -27,24 +27,35 @@ describe TmuxREPL::Keyboard do
     TmuxREPL::Keyboard.label_for(following.action).should eq("Ctrl+Down")
   end
 
-  it "maps output arrow and page keys to scroll actions" do
-    TmuxREPL::Keyboard.output_sequence_binding_for("\e[A").not_nil!.action.should eq(
-      TmuxREPL::Keyboard::Action::ScrollUp
-    )
-    TmuxREPL::Keyboard.output_sequence_binding_for("\e[B").not_nil!.action.should eq(
-      TmuxREPL::Keyboard::Action::ScrollDown
-    )
-    TmuxREPL::Keyboard.output_sequence_binding_for("\e[5~").not_nil!.action.should eq(
-      TmuxREPL::Keyboard::Action::ScrollPageUp
-    )
-    TmuxREPL::Keyboard.output_sequence_binding_for("\e[6~").not_nil!.action.should eq(
-      TmuxREPL::Keyboard::Action::ScrollPageDown
-    )
+  it "maps Alt arrows and page keys to shared scroll actions" do
+    {
+      "Alt+Up"       => TmuxREPL::Keyboard::Action::ScrollUp,
+      "Alt+Down"     => TmuxREPL::Keyboard::Action::ScrollDown,
+      "Alt+PageUp"   => TmuxREPL::Keyboard::Action::ScrollPageUp,
+      "Alt+PageDown" => TmuxREPL::Keyboard::Action::ScrollPageDown,
+    }.each do |key, action|
+      TmuxREPL::Keyboard.sequence_binding_for(key).not_nil!.action.should eq(action)
+    end
+  end
+
+  it "maps plain and Alt-modified output sequences to scroll actions" do
+    {
+      "\e[A"    => TmuxREPL::Keyboard::Action::ScrollUp,
+      "\e[B"    => TmuxREPL::Keyboard::Action::ScrollDown,
+      "\e[5~"   => TmuxREPL::Keyboard::Action::ScrollPageUp,
+      "\e[6~"   => TmuxREPL::Keyboard::Action::ScrollPageDown,
+      "\e[1;3A" => TmuxREPL::Keyboard::Action::ScrollUp,
+      "\e[1;3B" => TmuxREPL::Keyboard::Action::ScrollDown,
+      "\e[5;3~" => TmuxREPL::Keyboard::Action::ScrollPageUp,
+      "\e[6;3~" => TmuxREPL::Keyboard::Action::ScrollPageDown,
+    }.each do |sequence, action|
+      TmuxREPL::Keyboard.output_sequence_binding_for(sequence).not_nil!.action.should eq(action)
+    end
   end
 
   it "does not assign actions to unbound keys" do
     TmuxREPL::Keyboard.action_for('x').should be_nil
-    TmuxREPL::Keyboard.sequence_binding_for("Alt+Up").should be_nil
+    TmuxREPL::Keyboard.sequence_binding_for("Alt+Home").should be_nil
   end
 
   it "provides the label and help text from the binding definitions" do
@@ -56,7 +67,11 @@ describe TmuxREPL::Keyboard do
       "Ctrl+Up     Select the previous input.\n" \
       "Ctrl+Down   Select the next input.\n" \
       "Alt+K       Also select the previous input.\n" \
-      "Alt+J       Also select the next input."
+      "Alt+J       Also select the next input.\n" \
+      "Alt+Up      Scroll output up one line from either pane.\n" \
+      "Alt+Down    Scroll output down one line from either pane.\n" \
+      "Alt+PageUp  Scroll output up one page from either pane.\n" \
+      "Alt+PageDownScroll output down one page from either pane."
     )
   end
 end

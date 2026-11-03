@@ -19,10 +19,14 @@ The input frontend assigns an ID to each submitted command. In the left pane:
   Alt+K / Alt+J        Select previous / next input (aliases)
   :help                Show these controls
 
-In the right/output pane:
-  Up / Down            Scroll output one line
-  PageUp / PageDown    Scroll output one page
-  Ctrl+G               Toggle raw/stripped output view
+In either pane:
+  Alt+Up / Alt+Down          Scroll output one line
+  Alt+PageUp / Alt+PageDown  Scroll output one page
+  Ctrl+G                     Toggle raw/stripped output view
+
+The output pane additionally accepts:
+  Up / Down                  Scroll output one line
+  PageUp / PageDown          Scroll output one page
 
 The frontends and worker exchange commands, selection events, output and exit
 statuses through per-session durable LavinMQ streams. A custom interactive
