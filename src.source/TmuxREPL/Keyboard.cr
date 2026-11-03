@@ -42,9 +42,12 @@ BINDINGS = [
   ),
 ]
 
+# Ctrl+Up/Down are the primary bindings. Alt+K/J are aliases.
 SEQUENCE_BINDINGS = [
   SequenceBinding.new("Ctrl+Up", Action::SelectPrevious, "Ctrl+Up", "Select the previous input."),
   SequenceBinding.new("Ctrl+Down", Action::SelectNext, "Ctrl+Down", "Select the next input."),
+  SequenceBinding.new("Alt+K", Action::SelectPrevious, "Alt+K", "Also select the previous input."),
+  SequenceBinding.new("Alt+J", Action::SelectNext, "Alt+J", "Also select the next input."),
 ]
 
 def self.binding_for(key : Char) : Binding?

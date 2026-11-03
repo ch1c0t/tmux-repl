@@ -17,30 +17,29 @@ end
 include ReadNext
 
 private def on_ctrl_up(& : String ->) : Nil
+  binding = @keyboard_io.take_navigation_binding(TmuxREPL::Keyboard::Action::SelectPrevious)
   if callback = @on_previous
-    if binding = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up")
-      callback.call
-      @keyboard.enqueue(binding)
-    else
-      @editor.scroll_down
-    end
+    callback.call
+    @keyboard.enqueue(
+      binding || TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up").not_nil!
+    )
   else
     @editor.scroll_down
   end
 end
 
 private def on_ctrl_down(& : String ->) : Nil
+  binding = @keyboard_io.take_navigation_binding(TmuxREPL::Keyboard::Action::SelectNext)
   if callback = @on_next
-    if binding = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down")
-      callback.call
-      @keyboard.enqueue(binding)
-    else
-      @editor.scroll_up
-    end
+    callback.call
+    @keyboard.enqueue(
+      binding || TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down").not_nil!
+    )
   else
     @editor.scroll_up
   end
 end
+
 def prompt(io : IO, line_number : Int32, color : Bool)
   super(io, line_number, color)
   File.write(@ready_path, Process.pid.to_s) unless File.exists?(@ready_path)

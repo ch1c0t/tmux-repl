@@ -12,10 +12,12 @@ The executables have separate responsibilities:
   tmux.repl.worker  PTY command executor
 
 The input frontend assigns an ID to each submitted command. In the left pane:
-  :list             List inputs and the currently selected input
-  :select ID        Display only that input's output in the right pane
-  :prev / :next     Select the previous or next input
-  :help             Show these controls
+  :list                List inputs and the currently selected input
+  :select ID           Display only that input's output
+  :prev / :next        Select the previous or next input
+  Ctrl+Up / Ctrl+Down  Select previous / next input (primary)
+  Alt+K / Alt+J        Select previous / next input (aliases)
+  :help                Show these controls
 
 The frontends and worker exchange commands, selection events, output and exit
 statuses through per-session durable LavinMQ streams. A custom interactive

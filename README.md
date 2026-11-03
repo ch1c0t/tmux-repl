@@ -4,8 +4,8 @@ A reusable two-pane Tmux REPL library and command-line tools, implemented in Cry
 
 The tmux.repl executable orchestrates a named Tmux session. The left and right
 panes run separate frontends, while a background PTY worker executes shell
-commands. The three companion executables are independent processes so reply
-and crystal.pty are never imported by the same executable.
+commands. The three companion executables are independent processes so
+reply and crystal.pty are never imported by the same executable.
 
 ## Executable roles
 
@@ -19,7 +19,7 @@ Build all four executables with:
     shards build
 
 By default, the CLI prefers the companion executables beside the running
-`tmux.repl` binary, then searches the invoking process's $PATH. Each companion
+tmux.repl binary, then searches the invoking process's $PATH. Each companion
 can be overridden independently. An override may be an executable path or a
 command name found on $PATH.
 
@@ -53,13 +53,19 @@ ID. Use these controls in the left pane to select which input is shown on the ri
     :select ID  Display the output associated with a specific input
     :prev       Select the previous input
     :next       Select the next input
-    Ctrl+Up     Select the previous input
-    Ctrl+Down   Select the next input
+    Ctrl+Up     Select the previous input (primary)
+    Ctrl+Down   Select the next input (primary)
+    Alt+K       Select the previous input (alias)
+    Alt+J       Select the next input (alias)
     :help       Show these controls
+
+Alt+K/J are handled only when tmux passes the chords through to the input pane.
+When using custom tmux pane-movement bindings, make sure they forward these keys
+while the input pane is active.
 
 The output pane streams the raw PTY transcript while a command is running, then
 switches automatically to the stripped command output when its exit status is
-available. Press `Ctrl+G` in either the Input or Output pane to toggle between
+available. Press Ctrl+G in either the Input or Output pane to toggle between
 stripped and raw transcript views. The same shortcut works in both panes, and
 the selected view remains active until toggled again.
 
@@ -119,7 +125,7 @@ Start a new session with timing diagnostics enabled:
 
 Run a few commands, including the first one, then inspect
 $XDG_STATE_HOME/tmux-repl/latency-debug/timing.log (or
-$HOME/.local/state/tmux-repl/latency-debug/timing.log when
-XDG_STATE_HOME is unset). The trace separates input publication, worker
-delivery, PTY execution, output-event publication, and output-pane rendering.
+$HOME/.local/state/tmux-repl/latency-debug/timing.log when XDG_STATE_HOME is unset).
+The trace separates input publication, worker delivery, PTY execution,
+output-event publication, and output-pane rendering.
 Tracing is disabled by default.

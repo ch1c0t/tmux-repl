@@ -7,9 +7,19 @@ describe TmuxREPL::Keyboard do
     )
   end
 
-  it "maps Ctrl+Up and Ctrl+Down to adjacent input selection" do
+  it "keeps Ctrl+Up and Ctrl+Down as the primary input-selection bindings" do
     previous = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up").not_nil!
     following = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down").not_nil!
+
+    previous.action.should eq(TmuxREPL::Keyboard::Action::SelectPrevious)
+    following.action.should eq(TmuxREPL::Keyboard::Action::SelectNext)
+    TmuxREPL::Keyboard.label_for(previous.action).should eq("Ctrl+Up")
+    TmuxREPL::Keyboard.label_for(following.action).should eq("Ctrl+Down")
+  end
+
+  it "provides Alt+K and Alt+J as aliases for input selection" do
+    previous = TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!
+    following = TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!
 
     previous.action.should eq(TmuxREPL::Keyboard::Action::SelectPrevious)
     following.action.should eq(TmuxREPL::Keyboard::Action::SelectNext)
@@ -29,7 +39,9 @@ describe TmuxREPL::Keyboard do
     TmuxREPL::Keyboard.help_text.should eq(
       "Ctrl+G      Toggle stripped/raw output from either pane.\n" \
       "Ctrl+Up     Select the previous input.\n" \
-      "Ctrl+Down   Select the next input."
+      "Ctrl+Down   Select the next input.\n" \
+      "Alt+K       Also select the previous input.\n" \
+      "Alt+J       Also select the next input."
     )
   end
 end
