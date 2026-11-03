@@ -180,6 +180,21 @@ private def matches?(
   true
 end
 
+private def matches?(
+  buffer : Bytes,
+  offset : Int32,
+  limit : Int32,
+  sequence : String
+) : Bool
+  bytes = sequence.to_slice
+  return false if offset + bytes.size > limit
+
+  bytes.size.times do |index|
+    return false unless buffer[offset + index] == bytes[index]
+  end
+  true
+end
+
 # Keep Enter and each Ctrl navigation sequence in a separate read so Reply can
 # parse them even when ordinary text or another key arrived in the same OS read.
 private def bytes_before_line_ending(available : Int32) : Int32
@@ -201,8 +216,8 @@ end
 
 private def navigation_sequence_size(offset : Int32, limit : Int32) : Int32?
   sequence = "\e[1;5A"
-  return sequence.bytesize if matches?(@read_buffer.to_a, offset, limit, sequence)
+  return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
 
   sequence = "\e[1;5B"
-  return sequence.bytesize if matches?(@read_buffer.to_a, offset, limit, sequence)
+  return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
 end

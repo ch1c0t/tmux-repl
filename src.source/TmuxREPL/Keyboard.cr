@@ -19,7 +19,7 @@ struct Binding
   end
 
   def help_line : String
-    "#{label.ljust(12)}#{description}"
+    "#{label.ljust(16)}#{description}"
   end
 end
 
@@ -33,7 +33,7 @@ struct SequenceBinding
   end
 
   def help_line : String
-    "#{label.ljust(12)}#{description}"
+    "#{label.ljust(16)}#{description}"
   end
 end
 
@@ -64,12 +64,17 @@ INPUT_SCROLL_SEQUENCES = {
   "\e[1;3B" => "Alt+Down",
   "\e[5;3~" => "Alt+PageUp",
   "\e[6;3~" => "Alt+PageDown",
+  "\e\e[A"  => "Alt+Up",
+  "\e\e[B"  => "Alt+Down",
+  "\e\e[5~" => "Alt+PageUp",
+  "\e\e[6~" => "Alt+PageDown",
 }
 
 INPUT_SEQUENCE_STRINGS = [
   "\ek", "\ej", "\e[107;3u", "\e[106;3u",
   "\e[1;5A", "\e[1;5B",
   "\e[1;3A", "\e[1;3B", "\e[5;3~", "\e[6;3~",
+  "\e\e[A", "\e\e[B", "\e\e[5~", "\e\e[6~",
 ]
 
 # Unmodified keys and their Alt-modified equivalents are accepted in Output.
@@ -82,6 +87,10 @@ OUTPUT_SEQUENCE_BINDINGS = {
   "\e[1;3B" => SequenceBinding.new("Alt+Down", Action::ScrollDown, "Alt+Down", "Scroll output down one line."),
   "\e[5;3~" => SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page."),
   "\e[6;3~" => SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page."),
+  "\e\e[A"  => SequenceBinding.new("Alt+Up", Action::ScrollUp, "Alt+Up", "Scroll output up one line."),
+  "\e\e[B"  => SequenceBinding.new("Alt+Down", Action::ScrollDown, "Alt+Down", "Scroll output down one line."),
+  "\e\e[5~" => SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page."),
+  "\e\e[6~" => SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page."),
 }
 
 def self.binding_for(key : Char) : Binding?

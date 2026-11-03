@@ -48,6 +48,10 @@ describe TmuxREPL::Keyboard do
       "\e[1;3B" => TmuxREPL::Keyboard::Action::ScrollDown,
       "\e[5;3~" => TmuxREPL::Keyboard::Action::ScrollPageUp,
       "\e[6;3~" => TmuxREPL::Keyboard::Action::ScrollPageDown,
+      "\e\e[A"  => TmuxREPL::Keyboard::Action::ScrollUp,
+      "\e\e[B"  => TmuxREPL::Keyboard::Action::ScrollDown,
+      "\e\e[5~" => TmuxREPL::Keyboard::Action::ScrollPageUp,
+      "\e\e[6~" => TmuxREPL::Keyboard::Action::ScrollPageDown,
     }.each do |sequence, action|
       TmuxREPL::Keyboard.output_sequence_binding_for(sequence).not_nil!.action.should eq(action)
     end
@@ -63,15 +67,15 @@ describe TmuxREPL::Keyboard do
 
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+G")
     TmuxREPL::Keyboard.help_text.should eq(
-      "Ctrl+G      Toggle stripped/raw output from either pane.\n" \
-      "Ctrl+Up     Select the previous input.\n" \
-      "Ctrl+Down   Select the next input.\n" \
-      "Alt+K       Also select the previous input.\n" \
-      "Alt+J       Also select the next input.\n" \
-      "Alt+Up      Scroll output up one line from either pane.\n" \
-      "Alt+Down    Scroll output down one line from either pane.\n" \
-      "Alt+PageUp  Scroll output up one page from either pane.\n" \
-      "Alt+PageDownScroll output down one page from either pane."
+      "Ctrl+G           Toggle stripped/raw output from either pane.\n" \
+      "Ctrl+Up          Select the previous input.\n" \
+      "Ctrl+Down        Select the next input.\n" \
+      "Alt+K            Also select the previous input.\n" \
+      "Alt+J            Also select the next input.\n" \
+      "Alt+Up           Scroll output up one line from either pane.\n" \
+      "Alt+Down         Scroll output down one line from either pane.\n" \
+      "Alt+PageUp       Scroll output up one page from either pane.\n" \
+      "Alt+PageDown     Scroll output down one page from either pane."
     )
   end
 end

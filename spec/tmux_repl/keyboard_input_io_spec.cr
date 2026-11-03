@@ -92,6 +92,15 @@ describe TmuxREPL::Keyboard::InputIO do
     String.new(buffer[0, third_size]).should eq("tail")
   end
 
+  it "consumes escape-prefixed Alt key sequences used by some terminals" do
+    source = IO::Memory.new("before\e\e[Aafter\e\e[5~tail")
+    input = TmuxREPL::Keyboard::InputIO.new(source)
+    buffer = Bytes.new(1024)
+
+    size = input.read(buffer)
+    String.new(buffer[0, size]).should eq("beforeaftertail")
+  end
+
   it "separates ordinary text from a following navigation sequence" do
     input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("shell\ek"))
     buffer = Bytes.new(1024)
