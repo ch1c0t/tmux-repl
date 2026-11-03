@@ -67,6 +67,7 @@ module Input
         @editor.scroll_up
       end
     end
+    
     def prompt(io : IO, line_number : Int32, color : Bool)
       super(io, line_number, color)
       File.write(@ready_path, Process.pid.to_s) unless File.exists?(@ready_path)
