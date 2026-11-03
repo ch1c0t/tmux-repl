@@ -47,6 +47,19 @@ describe TmuxREPL::Keyboard::InputIO do
     next_input.take_navigation_binding(TmuxREPL::Keyboard::Action::SelectNext).not_nil!.label.should eq("Alt+J")
   end
 
+
+  it "separates ordinary text from a following navigation sequence" do
+    input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("shell\\ek"))
+    buffer = Bytes.new(1024)
+
+    size = input.read(buffer)
+    String.new(buffer[0, size]).should eq("shell")
+
+    size = input.read(buffer)
+    String.new(buffer[0, size]).should eq("\\e[1;5A")
+    input.take_navigation_binding(TmuxREPL::Keyboard::Action::SelectPrevious).not_nil!.label.should eq("Alt+K")
+  end
+
   it "retains native Ctrl+Up/Down bindings" do
     input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("\e[1;5A\e[1;5B"))
     buffer = Bytes.new(1024)

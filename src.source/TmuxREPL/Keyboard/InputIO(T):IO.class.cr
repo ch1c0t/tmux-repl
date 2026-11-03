@@ -145,8 +145,10 @@ private def bytes_before_line_ending(available : Int32) : Int32
     return index == 0 ? 1 : index if byte == '\r'.ord
     return index == 0 ? 1 : index if byte == '\n'.ord && index == available - 1
 
-    if byte == '\e'.ord && (sequence_size = navigation_sequence_size(offset, @source_size))
-      return index == 0 ? sequence_size : index
+    if byte == '\e'.ord
+      if sequence_size = navigation_sequence_size(offset, @source_size)
+        return index == 0 ? sequence_size : index
+      end
     end
   end
   available
