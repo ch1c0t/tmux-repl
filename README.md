@@ -60,8 +60,8 @@ ID. Use these controls in the left pane to select which input is shown on the ri
     :help       Show these controls
 
 Alt+K/J are handled only when tmux passes the chords through to the input pane.
-When using custom tmux pane-movement bindings, make sure they forward these keys
-while the input pane is active.
+The `ch1c0t/tmux.pane_movements` executables forward them automatically when
+the foreground command is `tmux.repl.input`; custom bindings must do the same.
 
 The output pane streams the raw PTY transcript while a command is running, then
 switches automatically to the stripped command output when its exit status is
