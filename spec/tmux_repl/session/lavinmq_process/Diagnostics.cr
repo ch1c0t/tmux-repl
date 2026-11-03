@@ -154,11 +154,14 @@ module LavinMQProcess
     private def process_snapshot : String
       rows = @ready_paths.map do |path|
         pid = file_state(path)
-        status = case
-                 when pid == "missing"       then "MISSING"
-                 when pid.starts_with?("unreadable") then "UNREADABLE"
-                 when pid.empty?             then "EMPTY"
-                 else                             "READY"
+        status = if pid == "missing"
+                   "MISSING"
+                 elsif pid.starts_with?("unreadable")
+                   "UNREADABLE"
+                 elsif pid.empty?
+                   "EMPTY"
+                 else
+                   "READY"
                  end
 
         [File.basename(path, ".pid"), pid, status]
@@ -354,10 +357,11 @@ module LavinMQProcess
         {"output" => actual}
       )
     rescue ex
-      raise ex if ex.message.to_s.includes?("PROCESS STATE")
+      raise ex if ex.message.to_s.starts_with?("+-- FAILURE")
 
       fail_with_diagnostics(
-        "Could not verify that the output pane excludes #{marker.inspect}: "         "#{ex.class}: #{ex.message}"
+        "Could not verify that the output pane excludes #{marker.inspect}: " +
+        "#{ex.class}: #{ex.message}"
       )
     end
   end
