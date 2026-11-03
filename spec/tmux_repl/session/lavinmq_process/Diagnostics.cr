@@ -47,7 +47,7 @@ module LavinMQProcess
 
         lines.each do |line|
           io << "| " << line
-          io << " " * (width - line.size)
+          io << " " * (width - line.chars.size)
           io << " |\n"
         end
 
@@ -96,7 +96,7 @@ module LavinMQProcess
     private def self.heading_border(title : String, widths : Array(Int32)) : String
       total_width = widths.reduce(0) { |sum, width| sum + width } + widths.size * 3 + 1
       label = fit(title, total_width - 6)
-      "+-- #{label} " + "-" * (total_width - label.size - 6) + "+"
+      "+-- #{label} " + "-" * (total_width - label.chars.size - 6) + "+"
     end
 
     private def self.separator(widths : Array(Int32)) : String
@@ -109,16 +109,17 @@ module LavinMQProcess
 
         widths.each_with_index do |width, index|
           value = fit(values[index].gsub("\n", "\\n"), width)
-          io << " " << value << " " * (width - value.size) << " |"
+          io << " " << value << " " * (width - value.chars.size) << " |"
         end
       end
     end
 
     private def self.fit(value : String, width : Int32) : String
-      return value if value.size <= width
-      return value[0, width] if width <= 3
+      characters = value.chars
+      return value if characters.size <= width
+      return characters[0, width].join if width <= 3
 
-      value[0, width - 3] + "..."
+      characters[0, width - 3].join + "..."
     end
   end
 

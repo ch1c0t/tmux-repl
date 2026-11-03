@@ -41,5 +41,13 @@ describe LavinMQProcess::DiagnosticFormatting do
     report.should contain("abcdefghij")
     report.should contain("klmnopqrst")
     report.should contain("uvwxyz")
+
+    unicode_report = LavinMQProcess::DiagnosticFormatting.frame(
+      "UNICODE PANE DIVIDER",
+      "────────────",
+      10
+    )
+    unicode_report.should contain("──────────")
+    unicode_report.should contain("──")
   end
 end
