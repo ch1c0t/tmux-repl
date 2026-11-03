@@ -67,15 +67,15 @@ describe TmuxREPL::Keyboard do
 
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+G")
     TmuxREPL::Keyboard.help_text.should eq(
-      "Ctrl+G           Toggle stripped/raw output from either pane.\n" \
-      "Ctrl+Up          Select the previous input.\n" \
-      "Ctrl+Down        Select the next input.\n" \
-      "Alt+K            Also select the previous input.\n" \
-      "Alt+J            Also select the next input.\n" \
-      "Alt+Up           Scroll output up one line from either pane.\n" \
-      "Alt+Down         Scroll output down one line from either pane.\n" \
-      "Alt+PageUp       Scroll output up one page from either pane.\n" \
-      "Alt+PageDown     Scroll output down one page from either pane."
+      "Ctrl+G          Toggle stripped/raw output from either pane.\n" \
+      "Ctrl+Up         Select the previous input.\n" \
+      "Ctrl+Down       Select the next input.\n" \
+      "Alt+K           Also select the previous input.\n" \
+      "Alt+J           Also select the next input.\n" \
+      "Alt+Up          Scroll output up one line from either pane.\n" \
+      "Alt+Down        Scroll output down one line from either pane.\n" \
+      "Alt+PageUp      Scroll output up one page from either pane.\n" \
+      "Alt+PageDown    Scroll output down one page from either pane."
     )
   end
 end
