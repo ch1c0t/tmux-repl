@@ -310,7 +310,7 @@ module Output
       def update(event : JSON::Any) : Nil
         @mutex.synchronize do
           sequence = event["sequence"].as_i64.to_u64
-      
+
           case event["type"].as_s
           when "input"
             @scroll_offset = 0 if @selected_sequence != sequence
@@ -336,6 +336,10 @@ module Output
             end
           when "toggle_view"
             @raw_view = !@raw_view
+          when "scroll"
+            if action = scroll_action(event["action"].as_s)
+              scroll_locked(action)
+            end
           end
         end
       end
@@ -367,31 +371,42 @@ module Output
     
     # Move the output viewport without moving the pinned command header or status.
     def scroll(action : TmuxREPL::Keyboard::Action) : Bool
-      @mutex.synchronize do
-        previous_offset = @scroll_offset
-        page_step = @body_height - 1
-        page_step = 1 if page_step < 1
-    
-        case action
-        when TmuxREPL::Keyboard::Action::ScrollUp
-          @scroll_offset += 1
-        when TmuxREPL::Keyboard::Action::ScrollDown
-          @scroll_offset -= 1
-        when TmuxREPL::Keyboard::Action::ScrollPageUp
-          @scroll_offset += page_step
-        when TmuxREPL::Keyboard::Action::ScrollPageDown
-          @scroll_offset -= page_step
-        end
-    
-        max_offset = @scrollable_lines - @body_height
-        max_offset = 0 if max_offset < 0
-        @scroll_offset = 0 if @scroll_offset < 0
-        @scroll_offset = max_offset if @scroll_offset > max_offset
-    
-        @scroll_offset != previous_offset
+      @mutex.synchronize { scroll_locked(action) }
+    end
+
+    private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
+      previous_offset = @scroll_offset
+      page_step = @body_height - 1
+      page_step = 1 if page_step < 1
+
+      case action
+      when TmuxREPL::Keyboard::Action::ScrollUp
+        @scroll_offset += 1
+      when TmuxREPL::Keyboard::Action::ScrollDown
+        @scroll_offset -= 1
+      when TmuxREPL::Keyboard::Action::ScrollPageUp
+        @scroll_offset += page_step
+      when TmuxREPL::Keyboard::Action::ScrollPageDown
+        @scroll_offset -= page_step
+      end
+
+      max_offset = @scrollable_lines - @body_height
+      max_offset = 0 if max_offset < 0
+      @scroll_offset = 0 if @scroll_offset < 0
+      @scroll_offset = max_offset if @scroll_offset > max_offset
+
+      @scroll_offset != previous_offset
+    end
+
+    private def scroll_action(name : String) : TmuxREPL::Keyboard::Action?
+      case name
+      when "ScrollUp"       then TmuxREPL::Keyboard::Action::ScrollUp
+      when "ScrollDown"     then TmuxREPL::Keyboard::Action::ScrollDown
+      when "ScrollPageUp"   then TmuxREPL::Keyboard::Action::ScrollPageUp
+      when "ScrollPageDown" then TmuxREPL::Keyboard::Action::ScrollPageDown
       end
     end
-    
+
     private def output_lines(text : String) : Array(String)
       normalized = text.gsub("\r\n", "\n").gsub("\r", "\n")
       return [] of String if normalized.empty?
