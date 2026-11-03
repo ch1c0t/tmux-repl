@@ -49,14 +49,14 @@ describe TmuxREPL::Keyboard::InputIO do
 
 
   it "separates ordinary text from a following navigation sequence" do
-    input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("shell\\ek"))
+    input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("shell\ek"))
     buffer = Bytes.new(1024)
 
     size = input.read(buffer)
     String.new(buffer[0, size]).should eq("shell")
 
     size = input.read(buffer)
-    String.new(buffer[0, size]).should eq("\\e[1;5A")
+    String.new(buffer[0, size]).should eq("\e[1;5A")
     input.take_navigation_binding(TmuxREPL::Keyboard::Action::SelectPrevious).not_nil!.label.should eq("Alt+K")
   end
 
