@@ -299,6 +299,8 @@ module TmuxREPL
     SEQUENCE_BINDINGS = [
       SequenceBinding.new("Ctrl+Up", Action::SelectPrevious, "Ctrl+Up", "Select the previous input."),
       SequenceBinding.new("Ctrl+Down", Action::SelectNext, "Ctrl+Down", "Select the next input."),
+      SequenceBinding.new("Alt+K", Action::SelectPrevious, "Alt+K", "Also select the previous input."),
+      SequenceBinding.new("Alt+J", Action::SelectNext, "Alt+J", "Also select the next input."),
     ]
     
     def self.binding_for(key : Char) : Binding?
@@ -331,8 +333,10 @@ module TmuxREPL
   
     class InputIO(T) < IO
       @source_buffer = Bytes.new(8192)
+      @read_buffer = Bytes.new(8192 * 3)
       @source_size = 0
       @source_offset = 0
+      @navigation_bindings = [] of SequenceBinding
       @eof = false
       
       def initialize(
@@ -351,12 +355,21 @@ module TmuxREPL
         count = bytes_before_line_ending(available)
         count = Math.min(count, slice.size)
       
-        slice[0, count].copy_from(@source_buffer[@source_offset, count])
+        slice[0, count].copy_from(@read_buffer[@source_offset, count])
         @source_offset += count
         if keyboard = @keyboard
           String.new(slice[0, count]).each_char { |char| keyboard.enqueue(char) }
         end
         count
+      end
+      
+      # Reply reports both native Ctrl arrows and translated Alt aliases through its
+      # existing Ctrl+Up/Down callbacks. Keep the original binding for diagnostics.
+      def take_navigation_binding(action : Action) : SequenceBinding?
+        return unless binding = @navigation_bindings.first?
+        return unless binding.action == action
+      
+        @navigation_bindings.shift
       end
       
       def write(slice : Bytes) : Nil
@@ -384,114 +397,103 @@ module TmuxREPL
       end
       
       private def refill : Nil
-        @source_size = @source.read(@source_buffer)
+        raw_size = @source.read(@source_buffer)
         @source_offset = 0
-        @eof = @source_size == 0
+        @source_size = translate_navigation_sequences(raw_size)
+        @eof = raw_size == 0
       end
       
-      # Keep Enter separate from a batched text read so Reply can submit the line.
+      # Translate Alt+K/J into the Ctrl+Up/Down sequences understood by Reply 0.4.
+      # Both ESC-prefixed terminal input and Kitty CSI-u input are accepted.
+      private def translate_navigation_sequences(raw_size : Int32) : Int32
+        input_offset = 0
+        output_size = 0
+      
+        while input_offset < raw_size
+          if sequence = alt_navigation_sequence(input_offset, raw_size)
+            binding, input_size = sequence
+            @navigation_bindings << binding
+      
+            translated = binding.action == Action::SelectPrevious ? "\e[1;5A" : "\e[1;5B"
+            output_size += append_sequence(translated, output_size)
+            input_offset += input_size
+          elsif binding = control_navigation_binding(input_offset, raw_size)
+            @navigation_bindings << binding
+            sequence_size = "\e[1;5A".bytesize
+            @read_buffer[output_size, sequence_size].copy_from(@source_buffer[input_offset, sequence_size])
+            output_size += sequence_size
+            input_offset += sequence_size
+          else
+            @read_buffer[output_size] = @source_buffer[input_offset]
+            output_size += 1
+            input_offset += 1
+          end
+        end
+      
+        output_size
+      end
+      
+      private def alt_navigation_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
+        if matches?(@source_buffer, offset, limit, "\ek")
+          {TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!, 2}
+        elsif matches?(@source_buffer, offset, limit, "\ej")
+          {TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!, 2}
+        elsif matches?(@source_buffer, offset, limit, "\e[107;3u")
+          {TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!, 8}
+        elsif matches?(@source_buffer, offset, limit, "\e[106;3u")
+          {TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!, 8}
+        end
+      end
+      
+      private def control_navigation_binding(offset : Int32, limit : Int32) : SequenceBinding?
+        if matches?(@source_buffer, offset, limit, "\e[1;5A")
+          TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up")
+        elsif matches?(@source_buffer, offset, limit, "\e[1;5B")
+          TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down")
+        end
+      end
+      
+      private def append_sequence(sequence : String, offset : Int32) : Int32
+        bytes = sequence.to_slice
+        @read_buffer[offset, bytes.size].copy_from(bytes)
+        bytes.size
+      end
+      
+      private def matches?(buffer : Bytes, offset : Int32, limit : Int32, sequence : String) : Bool
+        bytes = sequence.to_slice
+        return false if offset + bytes.size > limit
+      
+        bytes.size.times do |index|
+          return false unless buffer[offset + index] == bytes[index]
+        end
+        true
+      end
+      
+      # Keep Enter and each navigation sequence in a separate read so Reply sees them
+      # even when ordinary text or another key arrived in the same OS read.
       private def bytes_before_line_ending(available : Int32) : Int32
         available.times do |index|
-          byte = @source_buffer[@source_offset + index]
+          offset = @source_offset + index
+          byte = @read_buffer[offset]
+      
           return index == 0 ? 1 : index if byte == '\r'.ord
           return index == 0 ? 1 : index if byte == '\n'.ord && index == available - 1
+      
+          if byte == '\e'.ord && (sequence_size = navigation_sequence_size(offset, @source_size))
+            return index == 0 ? sequence_size : index
+          end
         end
         available
       end
-    end
-  
-    struct KeyPress
-        getter character : Char
-        getter key : String?
-        getter action : Action?
-        getter pressed_at : Time
-        getter monotonic_at : Time::Instant
       
-        def initialize(@character : Char, @action : Action?)
-          @key = nil
-          @monotonic_at = Time.instant
-          @pressed_at = Time.utc
-        end
+      private def navigation_sequence_size(offset : Int32, limit : Int32) : Int32?
+        sequence = "\e[1;5A"
+        return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
       
-        def initialize(@key : String, @action : Action)
-          @character = '\0'
-          @monotonic_at = Time.instant
-          @pressed_at = Time.utc
-        end
-    end
-  
-    class Trace
-      @file : File? = nil
-      @previous_monotonic_at : Time::Instant?
-      
-      def initialize(session_name : String, pane : String, path : String? = nil)
-        @pane = pane
-        return unless path || trace_enabled?
-      
-        begin
-          trace_path = path || self.class.path_for(session_name)
-          FileUtils.mkdir_p(File.dirname(trace_path))
-          @file = File.open(trace_path, "a")
-          File.chmod(trace_path, 0o600)
-        rescue ex
-          @file.try &.close
-          @file = nil
-          STDERR.puts "tmux.repl.#{@pane}: cannot open keyboard trace: #{ex.message}"
-        end
+        sequence = "\e[1;5B"
+        return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
       end
-      
-      def self.path_for(session_name : String) : String
-        base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-        session = ENV["TMUX_REPL_SESSION_NAME"]? || session_name
-        File.join(base, "tmux-repl", session, "keyboard.trace.log")
-      end
-      
-      def record(press : KeyPress, action : String, result : String) : Nil
-        return unless file = @file
-      
-        elapsed = if previous = @previous_monotonic_at
-          (press.monotonic_at - previous).total_milliseconds.round(3).to_s
-        else
-          "first"
-        end
-      
-        line = String.build do |io|
-          io << "pressed_at=" << press.pressed_at.to_rfc3339(fraction_digits: 6)
-          io << " pane=" << @pane
-          io << " pid=" << Process.pid
-          if key = press.key
-          io << " key=" << key
-        else
-          io << " character=" << press.character.inspect
-        end
-          io << " action=" << action
-          io << " elapsed_since_previous_ms=" << elapsed
-          io << " result=" << result
-          io << 10_u8.chr
-        end
-      
-        file.flock_exclusive do
-          file.write(line.to_slice)
-          file.flush
-        end
-        @previous_monotonic_at = press.monotonic_at
-      rescue ex
-        STDERR.puts "tmux.repl.#{@pane}: cannot write keyboard trace: #{ex.message}"
-      end
-      
-      def close : Nil
-        if file = @file
-          file.close unless file.closed?
-        end
-      rescue ex
-        STDERR.puts "tmux.repl.#{@pane}: cannot close keyboard trace: #{ex.message}"
-      ensure
-        @file = nil
-      end
-      
-      private def trace_enabled? : Bool
-        ENV["LOG_LEVEL"]?.try(&.upcase) == "TRACE"
-      end
+
     end
   
     class Dispatcher
