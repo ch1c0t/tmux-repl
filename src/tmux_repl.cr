@@ -366,9 +366,11 @@ module TmuxREPL
       # Reply reports both native Ctrl arrows and translated Alt aliases through its
       # existing Ctrl+Up/Down callbacks. Keep the original binding for diagnostics.
       def take_navigation_binding(action : Action) : SequenceBinding?
-        return unless binding = @navigation_bindings.first?
+        return if @navigation_bindings.empty?
+
+        binding = @navigation_bindings.first
         return unless binding.action == action
-      
+
         @navigation_bindings.shift
       end
       
