@@ -313,7 +313,7 @@ module Output
         
         # Reserve the final footer row for the viewport's line-range summary.
         private def footer_lines(sequence : UInt64) : Array(String)
-          lines = ["[Up/Down: scroll; PageUp/PageDown: page]"]
+          lines = ["[Ctrl+O: list outputs · Up/Down: scroll; PageUp/PageDown: page]"]
           lines << "[exit status: #{@statuses[sequence]}]" if status = @statuses[sequence]?
           lines << ""
           lines
@@ -596,7 +596,35 @@ module Output
     
     # Move the output viewport without moving the pinned command header or status.
     def scroll(action : TmuxREPL::Keyboard::Action) : Bool
-      @mutex.synchronize { scroll_locked(action) }
+      @mutex.synchronize { scroll_current_view_locked(action) }
+    end
+    
+    private def scroll_current_view_locked(action : TmuxREPL::Keyboard::Action) : Bool
+      @list_view ? scroll_list_locked(action) : scroll_locked(action)
+    end
+    
+    private def scroll_list_locked(action : TmuxREPL::Keyboard::Action) : Bool
+      previous_offset = @list_scroll_offset
+      page_step = @list_body_height - 1
+      page_step = 1 if page_step < 1
+    
+      case action
+      when TmuxREPL::Keyboard::Action::ScrollUp
+        @list_scroll_offset += 1
+      when TmuxREPL::Keyboard::Action::ScrollDown
+        @list_scroll_offset -= 1
+      when TmuxREPL::Keyboard::Action::ScrollPageUp
+        @list_scroll_offset += page_step
+      when TmuxREPL::Keyboard::Action::ScrollPageDown
+        @list_scroll_offset -= page_step
+      end
+    
+      max_offset = @list_scrollable_lines - @list_body_height
+      max_offset = 0 if max_offset < 0
+      @list_scroll_offset = 0 if @list_scroll_offset < 0
+      @list_scroll_offset = max_offset if @list_scroll_offset > max_offset
+    
+      @list_scroll_offset != previous_offset
     end
     
     private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
