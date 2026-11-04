@@ -1,0 +1,23 @@
+HELP_MESSAGE = <<-S
+tmux.repl.test - interactive smoke test for a running tmux.repl installation
+
+Usage:
+  tmux.repl.test
+
+Run this command from inside the tmux session to which the test should return.
+It runs ./bin/tmux.repl start, exercises command selection, RAW/STRIPPED and
+available-outputs toggles, and scrolling in both panes. The new session is shown
+while the checks run and is left open afterwards.
+
+Requires:
+  ./bin/tmux.repl and its companion executables (build with shards build)
+  tmux
+  A running LavinMQ instance reachable through LAVINMQ_AMQP_UNIXSOCKET
+
+Set TMUX_REPL_TEST_DELAY to change the pause between checks (default: 0.8 seconds).
+
+S
+
+def print_help
+  puts HELP_MESSAGE
+end
