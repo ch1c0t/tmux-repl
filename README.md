@@ -69,6 +69,9 @@ and PageUp/PageDown keys work as well. The command header and exit status remain
 visible while navigating. The output footer reports the visible logical-line
 range and total, marking the total as provisional while a command is streaming.
 Press Ctrl+G in either pane to toggle between stripped and raw transcript views.
+Press Ctrl+O in either pane to toggle the available-outputs list. It shows each
+submitted input, its running/exit state, output-line count and first-line preview.
+Use the existing scroll keys to browse the list, then Ctrl+O to return to the output.
 
 ## Tmux REPL library and DSL
 
