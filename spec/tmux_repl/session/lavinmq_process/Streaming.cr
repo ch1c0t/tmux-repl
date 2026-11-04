@@ -128,13 +128,13 @@ module LavinMQProcess
     end
 
     private def expect_raw_output : Nil
-      expect_output("[RAW; Ctrl+G toggles view]", timeout: 2.seconds)
+      expect_output("[RAW; WRAP]", timeout: 2.seconds)
       expect_output("START_MARK_", "END_MARK_", timeout: 2.seconds)
     end
 
     private def expect_stripped_output : Nil
       @stage = "wait for stripped output mode"
-      expect_output("[STRIPPED; Ctrl+G toggles view]", timeout: 2.seconds)
+      expect_output("[STRIPPED; WRAP]", timeout: 2.seconds)
 
       @stage = "verify stripped command output"
       expect_output("Streaming Tick 1...", "Streaming Tick 4...", "[exit status: 0]", timeout: 2.seconds)
