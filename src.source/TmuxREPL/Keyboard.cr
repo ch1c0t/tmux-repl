@@ -46,9 +46,9 @@ BINDINGS = [
     "Toggle stripped/raw output from either pane."
   ),
   Binding.new(
-    '\u000f',
+    '\u000c',
     Action::ToggleOutputList,
-    "Ctrl+O",
+    "Ctrl+L",
     "Toggle the available-outputs list from either pane."
   ),
 ]
