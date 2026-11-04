@@ -143,10 +143,10 @@ describe Output::View do
   it "toggles an overview of all available outputs" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"echo first"})))
-    view.update(JSON.parse({"type" => "output", "sequence" => 1, "chunk" => "first result\\n"}.to_json))
-    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "first result\\n"}.to_json))
+    view.update(JSON.parse({"type" => "output", "sequence" => 1, "chunk" => "first result\n"}.to_json))
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "first result\n"}.to_json))
     view.update(JSON.parse(%({"type":"input","sequence":2,"command":"echo second"})))
-    view.update(JSON.parse({"type" => "output", "sequence" => 2, "chunk" => "second result\\n"}.to_json))
+    view.update(JSON.parse({"type" => "output", "sequence" => 2, "chunk" => "second result\n"}.to_json))
     view.update(JSON.parse(%({"type":"toggle_list_view","sequence":0})))
 
     list = IO::Memory.new
@@ -157,7 +157,7 @@ describe Output::View do
     list.to_s.should contain("echo second → second result")
     list.to_s.should contain("  #1 [EXIT 0] 1 lines")
     list.to_s.should contain("echo first → first result")
-    list.to_s.should contain("Ctrl+O: return")
+    list.to_s.should contain("Ctrl+L: return")
 
     view.update(JSON.parse(%({"type":"toggle_list_view","sequence":0})))
     selected = IO::Memory.new
