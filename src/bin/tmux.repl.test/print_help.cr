@@ -15,7 +15,6 @@ Requires:
   A running LavinMQ instance reachable through LAVINMQ_AMQP_UNIXSOCKET
 
 Set TMUX_REPL_TEST_DELAY to change the pause between checks (default: 0.8 seconds).
-
 S
 
 def print_help
