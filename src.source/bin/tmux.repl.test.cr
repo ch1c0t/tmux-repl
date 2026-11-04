@@ -88,6 +88,8 @@ class SmokeTest
       step("Down in the output pane scrolls by one line") do
         output_pane.send_keys("Down", enter: false)
         expect_output("SMOKE_SCROLL_LINE_02")
+      end
+      step("Up in the output pane scrolls back by one line") do
         output_pane.send_keys("Up", enter: false)
         expect_output("SMOKE_SCROLL_LINE_01")
       end
@@ -138,7 +140,13 @@ class SmokeTest
 
     stdout = IO::Memory.new
     stderr = IO::Memory.new
-    status = Process.run("./bin/tmux.repl", ["start"], output: stdout, error: stderr)
+    status = Process.run(
+      "./bin/tmux.repl",
+      ["start"],
+      env: {"TMUX_REPL_SESSION" => nil},
+      output: stdout,
+      error: stderr
+    )
     unless status.success?
       raise "./bin/tmux.repl start failed (#{status.exit_code}).\n#{stdout}\n#{stderr}"
     end
