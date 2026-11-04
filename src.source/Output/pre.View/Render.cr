@@ -4,6 +4,11 @@ def render(io : IO = STDOUT, height : Int32? = nil) : Nil
     screen_height = height || terminal_height
     screen_height = 1 if screen_height < 1
 
+    if @list_view
+      render_output_list(io, screen_height)
+      next
+    end
+
     unless selected = @selected_sequence
       write_frame(io, ["No inputs yet."], screen_height)
       next
