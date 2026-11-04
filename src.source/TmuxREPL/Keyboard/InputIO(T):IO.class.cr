@@ -87,7 +87,10 @@ private def translate_navigation_sequences(eof : Bool) : Int32
   limit = @pending_source.size
 
   while input_offset < limit
-    if sequence = input_scroll_sequence(input_offset, limit)
+    if matches?(@pending_source, input_offset, limit, "\f")
+      @keyboard.try &.enqueue('\u000c')
+      input_offset += 1
+    elsif sequence = input_scroll_sequence(input_offset, limit)
       binding, input_size = sequence
       @keyboard.try &.enqueue(binding)
       input_offset += input_size
