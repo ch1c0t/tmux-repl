@@ -93,7 +93,7 @@ private def fit_sections(
 end
 
 # The viewport owns scrolling, visible-line selection, and logical line numbering.
-private struct Viewport
+struct Viewport
   getter lines : Array(String)
   getter total_lines : Int32
   getter first_line : Int32?
