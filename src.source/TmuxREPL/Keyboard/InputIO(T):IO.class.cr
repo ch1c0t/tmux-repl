@@ -90,6 +90,9 @@ private def translate_navigation_sequences(eof : Bool) : Int32
     if matches?(@pending_source, input_offset, limit, "\f")
       @keyboard.try &.enqueue('\u000c')
       input_offset += 1
+    elsif matches?(@pending_source, input_offset, limit, "\u0017")
+      @keyboard.try &.enqueue('\u0017')
+      input_offset += 1
     elsif sequence = input_scroll_sequence(input_offset, limit)
       binding, input_size = sequence
       @keyboard.try &.enqueue(binding)

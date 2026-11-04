@@ -68,7 +68,11 @@ Alt+PageUp/Alt+PageDown (one page). In the output pane, the unmodified Up/Down
 and PageUp/PageDown keys work as well. The command header and exit status remain
 visible while navigating. The output footer reports the visible logical-line
 range and total, marking the total as provisional while a command is streaming.
-Press Ctrl+G in either pane to toggle between stripped and raw transcript views.
+Long output lines wrap by default; Ctrl+W switches to NO-WRAP so each logical
+line stays on one row. In NO-WRAP mode, Left/Right scroll horizontally and
+Home/End jump to either edge in the output pane. Use Alt+Left/Alt+Right and
+Alt+Home/Alt+End for the same actions from the input pane. Press Ctrl+G in
+either pane to toggle between stripped and raw transcript views.
 Press Ctrl+L in either pane to toggle the available-outputs list. It shows each
 submitted input, its running/exit state, output-line count and first-line preview.
 Use the existing scroll keys to browse the list, then Ctrl+L to return to the output.

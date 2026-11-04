@@ -5,6 +5,9 @@
 @selected_sequence : UInt64?
 @raw_view = false
 @list_view = false
+@wrap_lines = true
+@horizontal_offset = 0
+@render_width = 79
 @list_scroll_offset = 0
 @list_body_height = 1
 @list_scrollable_lines = 0
@@ -26,7 +29,21 @@ def toggle_view : Bool
   end
 end
 
-# Move the output viewport without moving the pinned command header or status.
+# Switch between wrapped logical lines and one-row-per-line horizontal inspection.
+def toggle_wrap : Bool
+  @mutex.synchronize do
+    @wrap_lines = !@wrap_lines
+    @horizontal_offset = 0
+    @scroll_offset = 0
+    @wrap_lines
+  end
+end
+
+def wrap_lines? : Bool
+  @mutex.synchronize { @wrap_lines }
+end
+
+# Move the output viewport vertically or horizontally.
 def scroll(action : TmuxREPL::Keyboard::Action) : Bool
   @mutex.synchronize { scroll_current_view_locked(action) }
 end
@@ -61,6 +78,7 @@ end
 
 private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
   previous_offset = @scroll_offset
+  previous_horizontal_offset = @horizontal_offset
   page_step = @body_height - 1
   page_step = 1 if page_step < 1
 
@@ -73,6 +91,14 @@ private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
     @scroll_offset += page_step
   when TmuxREPL::Keyboard::Action::ScrollPageDown
     @scroll_offset -= page_step
+  when TmuxREPL::Keyboard::Action::ScrollHorizontalLeft
+    @horizontal_offset -= 1 if !@wrap_lines && @horizontal_offset > 0
+  when TmuxREPL::Keyboard::Action::ScrollHorizontalRight
+    @horizontal_offset += 1 if !@wrap_lines && @horizontal_offset < maximum_horizontal_offset
+  when TmuxREPL::Keyboard::Action::ScrollHorizontalStart
+    @horizontal_offset = 0 unless @wrap_lines
+  when TmuxREPL::Keyboard::Action::ScrollHorizontalEnd
+    @horizontal_offset = maximum_horizontal_offset unless @wrap_lines
   end
 
   max_offset = @scrollable_lines - @body_height
@@ -80,15 +106,37 @@ private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
   @scroll_offset = 0 if @scroll_offset < 0
   @scroll_offset = max_offset if @scroll_offset > max_offset
 
-  @scroll_offset != previous_offset
+  @horizontal_offset = 0 if @wrap_lines
+  @horizontal_offset = maximum_horizontal_offset if @horizontal_offset > maximum_horizontal_offset
+
+  @scroll_offset != previous_offset || @horizontal_offset != previous_horizontal_offset
+end
+
+private def maximum_horizontal_offset : Int32
+  return 0 if @wrap_lines
+  return 0 unless sequence = @selected_sequence
+
+  completed = @statuses.has_key?(sequence)
+  displayed_output, _label = displayed_output_for(sequence, completed)
+  return 0 unless output = displayed_output
+
+  widest_line = output_lines(output).max_of? { |line| display_width(line) } || 0
+  visible_width = @render_width - 1
+  visible_width = 0 if visible_width < 0
+  offset = widest_line - visible_width
+  offset > 0 ? offset : 0
 end
 
 private def scroll_action(name : String) : TmuxREPL::Keyboard::Action?
   case name
-  when "ScrollUp"       then TmuxREPL::Keyboard::Action::ScrollUp
-  when "ScrollDown"     then TmuxREPL::Keyboard::Action::ScrollDown
-  when "ScrollPageUp"   then TmuxREPL::Keyboard::Action::ScrollPageUp
-  when "ScrollPageDown" then TmuxREPL::Keyboard::Action::ScrollPageDown
+  when "ScrollUp"                   then TmuxREPL::Keyboard::Action::ScrollUp
+  when "ScrollDown"                 then TmuxREPL::Keyboard::Action::ScrollDown
+  when "ScrollPageUp"               then TmuxREPL::Keyboard::Action::ScrollPageUp
+  when "ScrollPageDown"             then TmuxREPL::Keyboard::Action::ScrollPageDown
+  when "ScrollHorizontalLeft"       then TmuxREPL::Keyboard::Action::ScrollHorizontalLeft
+  when "ScrollHorizontalRight"      then TmuxREPL::Keyboard::Action::ScrollHorizontalRight
+  when "ScrollHorizontalStart"      then TmuxREPL::Keyboard::Action::ScrollHorizontalStart
+  when "ScrollHorizontalEnd"        then TmuxREPL::Keyboard::Action::ScrollHorizontalEnd
   end
 end
 

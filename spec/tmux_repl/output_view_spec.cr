@@ -243,4 +243,58 @@ describe Output::View do
     latest.to_s.should contain("OUTPUT_LINE_10")
     latest.to_s.should contain("[Output lines 9–10 of 10]")
   end
+  it "wraps a long logical output line into visual rows without changing its line number" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run task"})))
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "abcdefghijklmnopqrst"}.to_json))
+
+    output = IO::Memory.new
+    view.render(output, height: 9, width: 12)
+
+    output.to_s.should contain("abcdefghijk")
+    output.to_s.should contain("lmnopqrst")
+    output.to_s.should contain("[Output lines 1–1 of 1]")
+    view.wrap_lines?.should be_true
+  end
+
+  it "supports no-wrap horizontal scrolling and jumping to either edge" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run task"})))
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "abcdefghijklmnopqrst"}.to_json))
+    view.toggle_wrap.should be_false
+
+    initial = IO::Memory.new
+    view.render(initial, height: 9, width: 12)
+    initial.to_s.should contain("abcdefghij›")
+    initial.to_s.should contain("[Output lines 1–1 of 1]")
+
+    view.scroll(TmuxREPL::Keyboard::Action::ScrollHorizontalRight).should be_true
+    shifted = IO::Memory.new
+    view.render(shifted, height: 9, width: 12)
+    shifted.to_s.should contain("‹bcdefghij›")
+
+    view.scroll(TmuxREPL::Keyboard::Action::ScrollHorizontalEnd).should be_true
+    ending = IO::Memory.new
+    view.render(ending, height: 9, width: 12)
+    ending.to_s.should contain("‹klmnopqrst")
+
+    view.scroll(TmuxREPL::Keyboard::Action::ScrollHorizontalStart).should be_true
+    beginning = IO::Memory.new
+    view.render(beginning, height: 9, width: 12)
+    beginning.to_s.should contain("abcdefghij›")
+  end
+
+  it "returns to wrapped mode and resets the horizontal offset" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run task"})))
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "abcdefghijklmnopqrst"}.to_json))
+    view.toggle_wrap
+    view.scroll(TmuxREPL::Keyboard::Action::ScrollHorizontalEnd)
+
+    view.toggle_wrap.should be_true
+    output = IO::Memory.new
+    view.render(output, height: 9, width: 12)
+    output.to_s.should contain("abcdefghijk")
+    output.to_s.should contain("lmnopqrst")
+  end
 end

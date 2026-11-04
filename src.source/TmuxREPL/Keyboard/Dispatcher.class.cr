@@ -107,9 +107,19 @@ private def dispatch(press : KeyPress) : Nil
                STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                "publish_failed"
              end
+           when Action::ToggleOutputWrap
+             begin
+               TmuxREPL.publish_event(@events, "toggle_wrap", @session_name, 0_u64)
+               "published"
+             rescue ex
+               STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
+               "publish_failed"
+             end
            when Action::SelectPrevious, Action::SelectNext
              "handled_by_input_reader"
-           when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown
+           when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown,
+                Action::ScrollHorizontalLeft, Action::ScrollHorizontalRight,
+                Action::ScrollHorizontalStart, Action::ScrollHorizontalEnd
              if @pane == "input"
                begin
                  TmuxREPL.publish_event(

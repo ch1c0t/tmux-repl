@@ -3,7 +3,8 @@ private def render_selected(
   io : IO,
   sequence : UInt64,
   command : String,
-  screen_height : Int32
+  screen_height : Int32,
+  screen_width : Int32
 ) : Nil
   completed = @statuses.has_key?(sequence)
   displayed_output, mode_label = displayed_output_for(sequence, completed)
@@ -12,10 +13,10 @@ private def render_selected(
   footer = footer_lines(sequence)
 
   header, footer, body_height = fit_sections(header, footer, screen_height)
-  viewport = build_viewport(displayed_output, completed, body_height)
+  viewport = build_viewport(displayed_output, completed, body_height, screen_width)
   footer[-1] = viewport.line_summary(completed)
 
-  write_frame(io, compose_frame(header, viewport, footer), screen_height)
+  write_frame(io, compose_frame(header, viewport, footer), screen_height, screen_width)
 end
 
 # Choose the transcript representation and its matching mode label.
@@ -40,17 +41,22 @@ end
 
 # The header is pinned while the output viewport scrolls.
 private def header_lines(sequence : UInt64, command : String, mode_label : String) : Array(String)
-  toggle_key = TmuxREPL::Keyboard.label_for(TmuxREPL::Keyboard::Action::ToggleOutputView)
+  wrap_label = @wrap_lines ? "WRAP" : "NO-WRAP"
   [
-    "INPUT ##{sequence} [#{mode_label}; #{toggle_key} toggles view]",
+    "INPUT ##{sequence} [#{mode_label}; #{wrap_label}]",
     *output_lines(command),
     "─" * 40,
   ]
 end
 
-# Reserve the final footer row for the viewport's line-range summary.
+# Keep the footer to one control row plus the exit status and line summary.
 private def footer_lines(sequence : UInt64) : Array(String)
-  lines = ["[Ctrl+L: list outputs · Up/Down: scroll; PageUp/PageDown: page]"]
+  controls = if @wrap_lines
+    "[WRAP · Up/Down: scroll · Ctrl+W: no-wrap · Ctrl+L: list]"
+  else
+    "[NO-WRAP · ←/→: horizontal · Home/End: edges · Ctrl+W: wrap]"
+  end
+  lines = [controls]
   lines << "[exit status: #{@statuses[sequence]}]" if status = @statuses[sequence]?
   lines << ""
   lines
@@ -75,7 +81,8 @@ end
 private def build_viewport(
   displayed_output : String?,
   completed : Bool,
-  height : Int32
+  height : Int32,
+  width : Int32
 ) : Viewport
   body = if output = displayed_output
     output_lines(output)
@@ -85,8 +92,18 @@ private def build_viewport(
     [] of String
   end
 
+  if !@wrap_lines
+    widest_line = body.max_of? { |line| display_width(line) } || 0
+    max_offset = widest_line - (width - 1)
+    max_offset = 0 if max_offset < 0
+    @horizontal_offset = max_offset if @horizontal_offset > max_offset
+  else
+    @horizontal_offset = 0
+  end
+
+  rows = viewport_rows(body, width)
   @body_height = height
-  @scrollable_lines = body.size
+  @scrollable_lines = rows.size
 
   max_offset = @scrollable_lines - @body_height
   max_offset = 0 if max_offset < 0
@@ -98,18 +115,144 @@ private def build_viewport(
   visible_start = 0 if visible_start < 0
   visible_count = visible_end - visible_start
 
-  visible_lines = Array(String).new(visible_count) do |index|
-    body[visible_start + index]
+  visible_lines = [] of String
+  first_line : Int32? = nil
+  last_line : Int32? = nil
+  visible_count.times do |index|
+    row = rows[visible_start + index]
+    visible_lines << row[0]
+    logical_line = row[1] + 1
+    first_line ||= logical_line
+    last_line = logical_line
   end
 
   # The running placeholder occupies a screen row, but is not output data.
   total_lines = displayed_output.nil? ? 0 : body.size
-  first_line = if total_lines > 0 && visible_count > 0
-    visible_start + 1
-  end
-  last_line = first_line ? visible_start + visible_count : nil
-
   Viewport.new(visible_lines, total_lines, first_line, last_line)
+end
+
+# Convert logical lines into terminal rows while retaining their original line numbers.
+private def viewport_rows(lines : Array(String), width : Int32) : Array(Tuple(String, Int32))
+  rows = [] of Tuple(String, Int32)
+  lines.each_with_index do |line, index|
+    rendered = if @wrap_lines
+      wrap_line(line, width)
+    else
+      [horizontal_line(line, width)]
+    end
+    rendered.each { |row| rows << {row, index} }
+  end
+  rows
+end
+
+private def viewport_row_count(text : String, width : Int32) : Int32
+  viewport_rows(output_lines(text), width).size
+end
+
+# Split a logical line without losing or rewriting its original content.
+private def wrap_line(line : String, width : Int32) : Array(String)
+  width = 1 if width < 1
+  rows = [] of String
+  current = [] of Char
+  current_width = 0
+
+  line.each_char do |char|
+    char_width = terminal_character_width(char)
+    if current_width > 0 && current_width + char_width > width
+      rows << current.join
+      current.clear
+      current_width = 0
+    end
+    current << char
+    current_width += char_width
+  end
+
+  rows << current.join
+  rows
+end
+
+# Keep a single visual row and mark hidden content at either edge.
+private def horizontal_line(line : String, width : Int32) : String
+  line_width = display_width(line)
+  return line if @horizontal_offset == 0 && line_width <= width
+
+  left_marker = @horizontal_offset > 0
+  content_width = width - (left_marker ? 1 : 0)
+  remaining_width = line_width - @horizontal_offset
+  right_marker = remaining_width > content_width
+  content_width -= 1 if right_marker
+  content = slice_display_columns(line, @horizontal_offset, content_width)
+
+  String.build do |buffer|
+    buffer << "‹" if left_marker
+    buffer << content
+    buffer << "›" if right_marker
+  end
+end
+
+private def display_width(text : String) : Int32
+  width = 0
+  text.each_char { |char| width += terminal_character_width(char) }
+  width
+end
+
+# Approximate terminal cell width: combining marks are zero, East Asian wide
+# characters and emoji are two, and ordinary printable characters are one.
+private def terminal_character_width(char : Char) : Int32
+  codepoint = char.ord
+
+  return 0 if codepoint < 0x20 || (codepoint >= 0x7f && codepoint < 0xa0)
+  return 0 if (0x0300..0x036f).includes?(codepoint) ||
+              (0x1ab0..0x1aff).includes?(codepoint) ||
+              (0x1dc0..0x1dff).includes?(codepoint) ||
+              (0x20d0..0x20ff).includes?(codepoint) ||
+              (0xfe00..0xfe0f).includes?(codepoint) ||
+              (0xfe20..0xfe2f).includes?(codepoint) ||
+              (0xe0100..0xe01ef).includes?(codepoint) ||
+              codepoint == 0x200d
+
+  return 2 if (0x1100..0x115f).includes?(codepoint) ||
+              codepoint == 0x2329 || codepoint == 0x232a ||
+              (0x2e80..0xa4cf).includes?(codepoint) ||
+              (0xac00..0xd7a3).includes?(codepoint) ||
+              (0xf900..0xfaff).includes?(codepoint) ||
+              (0xfe10..0xfe19).includes?(codepoint) ||
+              (0xfe30..0xfe6f).includes?(codepoint) ||
+              (0xff00..0xff60).includes?(codepoint) ||
+              (0xffe0..0xffe6).includes?(codepoint) ||
+              (0x1f300..0x1faff).includes?(codepoint) ||
+              (0x20000..0x3fffd).includes?(codepoint)
+
+  1
+end
+
+# Extract only complete characters that fit in the requested display columns.
+private def slice_display_columns(text : String, start_column : Int32, width : Int32) : String
+  return "" if width <= 0
+
+  column = 0
+  visible_width = 0
+  String.build do |buffer|
+    text.each_char do |char|
+      char_width = terminal_character_width(char)
+
+      if column + char_width <= start_column
+        column += char_width
+        next
+      end
+
+      if column < start_column && char_width > 0
+        column += char_width
+        next
+      end
+
+      break if char_width > 0 && visible_width + char_width > width
+
+      buffer << char
+      visible_width += char_width
+      column += char_width
+    end
+  end
 end
 
 # Compose fixed sections around the viewport without changing their contents.
@@ -124,13 +267,13 @@ private def compose_frame(
   frame
 end
 
-# Rewrite each row in place and flush once per complete frame.
-private def write_frame(io : IO, lines : Array(String), height : Int32) : Nil
+# Rewrite each row in place, clipping it before the terminal can auto-wrap it.
+private def write_frame(io : IO, lines : Array(String), height : Int32, width : Int32) : Nil
   output = String.build do |buffer|
     height.times do |index|
       line = lines[index]? || ""
       buffer << "\e[" << (index + 1) << ";1H"
-      buffer << line
+      buffer << fit_frame_line(line, width)
       buffer << "\e[0K"
     end
   end
@@ -138,11 +281,18 @@ private def write_frame(io : IO, lines : Array(String), height : Int32) : Nil
   io.flush
 end
 
+private def fit_frame_line(line : String, width : Int32) : String
+  return "" if width <= 0
+  return line if display_width(line) <= width
+
+  slice_display_columns(line, 0, width - 1) + "…"
+end
+
 # Show every submitted input with its execution state and a short output preview.
-private def render_output_list(io : IO, height : Int32) : Nil
+private def render_output_list(io : IO, height : Int32, width : Int32) : Nil
   sequences = @inputs.keys.sort
   if sequences.empty?
-    write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+L: return]"], height)
+    write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+L: return]"], height, width)
     return
   end
 
@@ -176,7 +326,7 @@ private def render_output_list(io : IO, height : Int32) : Nil
 
   rows = Array(String).new(visible_count)
   visible_count.times do |index|
-    rows << output_list_line(sequences[visible_start + index])
+    rows << output_list_line(sequences[visible_start + index], width)
   end
 
   footer[-1] = if visible_count == 0
@@ -188,10 +338,10 @@ private def render_output_list(io : IO, height : Int32) : Nil
   frame = header.dup
   frame.concat(rows)
   frame.concat(footer)
-  write_frame(io, frame, height)
+  write_frame(io, frame, height, width)
 end
 
-private def output_list_line(sequence : UInt64) : String
+private def output_list_line(sequence : UInt64, width : Int32) : String
   marker = sequence == @selected_sequence ? "*" : " "
   status = if exit_status = @statuses[sequence]?
     "EXIT #{exit_status}"
@@ -209,17 +359,20 @@ private def output_list_line(sequence : UInt64) : String
   command = @inputs[sequence].gsub(/[\r\n\t ]+/, " ").strip
 
   line = "#{marker} ##{sequence} [#{status}] #{visible_output_lines.size} lines | #{command} → #{preview}"
-  truncate_list_line(line, terminal_width)
+  truncate_list_line(line, width)
 end
 
 private def truncate_list_line(line : String, width : Int32) : String
   return "" if width <= 0
+  return line if display_width(line) <= width
+  return slice_display_columns(line, 0, width) if width == 1
 
-  characters = line.chars
-  return line if characters.size <= width
-  return characters.first(width).join if width == 1
+  slice_display_columns(line, 0, width - 1) + "…"
+end
 
-  characters.first(width - 1).join + "…"
+private def usable_width(width : Int32) : Int32
+  width = width - 1
+  width > 0 ? width : 1
 end
 
 private def terminal_width : Int32
