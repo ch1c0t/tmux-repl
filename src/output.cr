@@ -160,6 +160,7 @@ module Output
         consumer_tag : String? = nil
         dispatcher : TmuxREPL::Keyboard::Dispatcher? = nil
         terminal_mode = TmuxREPL::TerminalMode.new
+        cursor_hidden = false
       
         begin
           channel = Global.amqp_channel
@@ -191,6 +192,10 @@ module Output
           dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue, on_action)
           dispatcher.start
       
+          STDOUT.print "\e[?25l"
+          STDOUT.flush
+          cursor_hidden = true
+      
           view.render
           watch_keyboard(dispatcher, terminal_mode)
           mark_ready
@@ -203,11 +208,16 @@ module Output
             dispatcher.try &.stop
           ensure
             terminal_mode.restore
+            if cursor_hidden
+              STDOUT.print "\e[?25h"
+              STDOUT.flush
+            end
             unsubscribe(event_queue, consumer_tag)
             cleanup_readiness
           end
         end
       end
+      
     end
   
     getter session_name : String
@@ -229,19 +239,14 @@ module Output
           screen_height = height || terminal_height
           screen_height = 1 if screen_height < 1
       
-          io.print "\e[H\e[2J"
-          io.flush
-      
           unless selected = @selected_sequence
-            io.puts "No inputs yet."
-            io.flush
+            render_frame(io, ["No inputs yet."], screen_height)
             next
           end
       
           command = @inputs[selected]?
           unless command
-            io.puts "Waiting for input ##{selected}..."
-            io.flush
+            render_frame(io, ["Waiting for input ##{selected}..."], screen_height)
             next
           end
       
@@ -278,8 +283,11 @@ module Output
           footer = ["[Up/Down: scroll; PageUp/PageDown: page]"]
           footer << "[exit status: #{@statuses[selected]}]" if status = @statuses[selected]?
       
+          # Keep the footer visible even when a long command leaves little room for output.
+          footer = footer.last(screen_height)
+          header_limit = screen_height - footer.size - 1
+          header = header.first(header_limit) if header.size > header_limit
           @body_height = screen_height - header.size - footer.size
-          @body_height = 1 if @body_height < 1
           @scrollable_lines = body.size
       
           max_offset = @scrollable_lines - @body_height
@@ -291,18 +299,32 @@ module Output
           visible_start = visible_end - @body_height
           visible_start = 0 if visible_start < 0
       
-          header.each { |line| io.puts line }
-      
+          frame = header.dup
           index = visible_start
           while index < visible_end
-            io.puts body[index]
+            frame << body[index]
             index += 1
           end
-      
-          footer.each { |line| io.puts line }
-          io.flush
+          frame.concat(footer)
+          render_frame(io, frame, screen_height)
         end
       end
+      
+      # Rewrite each row in place. Clearing to end-of-line removes remnants of longer
+      # previous rows without blanking the whole pane between frames.
+      private def render_frame(io : IO, lines : Array(String), height : Int32) : Nil
+        output = String.build do |buffer|
+          height.times do |index|
+            line = lines[index]? || ""
+            buffer << "\e[" << (index + 1) << ";1H"
+            buffer << line
+            buffer << "\e[0K"
+          end
+        end
+        io.print output
+        io.flush
+      end
+      
     end
   
     module Update
