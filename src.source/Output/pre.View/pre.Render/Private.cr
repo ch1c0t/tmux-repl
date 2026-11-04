@@ -143,7 +143,7 @@ private def render_output_list(io : IO, height : Int32) : Nil
   sequences = @inputs.keys.sort
   if sequences.empty?
     write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+O: return]"], height)
-    next
+    return
   end
 
   header = [
@@ -204,11 +204,11 @@ private def output_list_line(sequence : UInt64) : String
   else
     @outputs[sequence]?
   end
-  output_lines = output ? self.output_lines(output) : [] of String
-  preview = output_lines.first? || "(no output yet)"
-  command = @inputs[sequence].gsub(/[\\r\\n\\t ]+/, " ").strip
+  visible_output_lines = output ? output_lines(output) : [] of String
+  preview = visible_output_lines.first? || "(no output yet)"
+  command = @inputs[sequence].gsub(/[\r\n\t ]+/, " ").strip
 
-  line = "#{marker} ##{sequence} [#{status}] #{output_lines.size} lines | #{command} → #{preview}"
+  line = "#{marker} ##{sequence} [#{status}] #{visible_output_lines.size} lines | #{command} → #{preview}"
   truncate_list_line(line, terminal_width)
 end
 
