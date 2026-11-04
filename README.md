@@ -66,8 +66,9 @@ foreground command is tmux.repl.input; custom bindings must do the same.
 Scroll the displayed output from either pane with Alt+Up/Alt+Down (one line) or
 Alt+PageUp/Alt+PageDown (one page). In the output pane, the unmodified Up/Down
 and PageUp/PageDown keys work as well. The command header and exit status remain
-visible while navigating. Press Ctrl+G in either pane to toggle between stripped
-and raw transcript views.
+visible while navigating. The output footer reports the visible logical-line
+range and total, marking the total as provisional while a command is streaming.
+Press Ctrl+G in either pane to toggle between stripped and raw transcript views.
 
 ## Tmux REPL library and DSL
 
