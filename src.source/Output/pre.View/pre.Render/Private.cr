@@ -50,7 +50,7 @@ end
 
 # Reserve the final footer row for the viewport's line-range summary.
 private def footer_lines(sequence : UInt64) : Array(String)
-  lines = ["[Ctrl+O: list outputs · Up/Down: scroll; PageUp/PageDown: page]"]
+  lines = ["[Ctrl+L: list outputs · Up/Down: scroll; PageUp/PageDown: page]"]
   lines << "[exit status: #{@statuses[sequence]}]" if status = @statuses[sequence]?
   lines << ""
   lines
@@ -142,13 +142,13 @@ end
 private def render_output_list(io : IO, height : Int32) : Nil
   sequences = @inputs.keys.sort
   if sequences.empty?
-    write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+O: return]"], height)
+    write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+L: return]"], height)
     return
   end
 
   header = [
     "AVAILABLE OUTPUTS (#{sequences.size})",
-    "[Up/Down: scroll · PageUp/PageDown: page · Ctrl+O: return]",
+    "[Up/Down: scroll · PageUp/PageDown: page · Ctrl+L: return]",
     "─" * 40,
   ]
   footer = [
