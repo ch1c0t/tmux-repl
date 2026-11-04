@@ -7,6 +7,14 @@ describe TmuxREPL::Keyboard do
     )
   end
 
+
+  it "maps Ctrl+O to the available-outputs list toggle" do
+    action = TmuxREPL::Keyboard::Action::ToggleOutputList
+
+    TmuxREPL::Keyboard.action_for('\u000f').should eq(action)
+    TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+O")
+  end
+
   it "keeps Ctrl+Up and Ctrl+Down as the primary input-selection bindings" do
     previous = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up").not_nil!
     following = TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down").not_nil!
@@ -68,6 +76,7 @@ describe TmuxREPL::Keyboard do
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+G")
     TmuxREPL::Keyboard.help_text.should eq(
       "Ctrl+G          Toggle stripped/raw output from either pane.\n" \
+      "Ctrl+O          Toggle the available-outputs list from either pane.\n" \
       "Ctrl+Up         Select the previous input.\n" \
       "Ctrl+Down       Select the next input.\n" \
       "Alt+K           Also select the previous input.\n" \
