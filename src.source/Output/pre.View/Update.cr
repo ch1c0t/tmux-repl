@@ -5,6 +5,7 @@ def update(event : JSON::Any) : Nil
 
     case event["type"].as_s
     when "input"
+      @list_scroll_offset += 1 if @list_view && @list_scroll_offset > 0
       @scroll_offset = 0 if @selected_sequence != sequence
       @inputs[sequence] = event["command"].as_s
       @selected_sequence = sequence
@@ -28,9 +29,12 @@ def update(event : JSON::Any) : Nil
       end
     when "toggle_view"
       @raw_view = !@raw_view
+    when "toggle_list_view"
+      @list_view = !@list_view
+      @list_scroll_offset = 0
     when "scroll"
       if action = scroll_action(event["action"].as_s)
-        scroll_locked(action)
+        scroll_current_view_locked(action)
       end
     end
   end
