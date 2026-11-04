@@ -75,8 +75,7 @@ describe TmuxREPL::Keyboard do
 
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+G")
     TmuxREPL::Keyboard.help_text.should eq(
-      "Ctrl+G          Toggle stripped/raw output from either pane.\n" \
-      "Ctrl+L          Toggle the available-outputs list from either pane.\n" \
+      "Ctrl+G: raw/stripped · Ctrl+L: list\n" \
       "Ctrl+Up         Select the previous input.\n" \
       "Ctrl+Down       Select the next input.\n" \
       "Alt+K           Also select the previous input.\n" \
