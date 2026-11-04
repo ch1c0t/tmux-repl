@@ -68,6 +68,14 @@ describe TmuxREPL::Keyboard::InputIO do
     next_input.take_navigation_binding(TmuxREPL::Keyboard::Action::SelectNext).not_nil!.label.should eq("Alt+J")
   end
 
+  it "consumes Ctrl+L instead of passing it to Reply" do
+    input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("before\fafter"))
+    buffer = Bytes.new(1024)
+
+    size = input.read(buffer)
+    String.new(buffer[0, size]).should eq("beforeafter")
+  end
+
   it "consumes Alt scrolling sequences rather than passing them to Reply" do
     source = "before\e[1;3Aafter\e[1;3Bpage-up\e[5;3~page-down\e[6;3~tail"
     input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new(source))
