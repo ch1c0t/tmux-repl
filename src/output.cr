@@ -400,6 +400,98 @@ module Output
           io.print output
           io.flush
         end
+        
+        # Show every submitted input with its execution state and a short output preview.
+        private def render_output_list(io : IO, height : Int32) : Nil
+          sequences = @inputs.keys.sort
+          if sequences.empty?
+            write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+O: return]"], height)
+            return
+          end
+
+          header = [
+            "AVAILABLE OUTPUTS (#{sequences.size})",
+            "[Up/Down: scroll · PageUp/PageDown: page · Ctrl+O: return]",
+            "─" * 40,
+          ]
+          footer = [
+            "* = currently displayed output",
+            "",
+          ]
+
+          footer = footer.last(height)
+          header_limit = height - footer.size - 1
+          header_limit = 0 if header_limit < 0
+          header = header.first(header_limit) if header.size > header_limit
+
+          @list_body_height = height - header.size - footer.size
+          @list_scrollable_lines = sequences.size
+
+          max_offset = @list_scrollable_lines - @list_body_height
+          max_offset = 0 if max_offset < 0
+          @list_scroll_offset = 0 if @list_scroll_offset < 0
+          @list_scroll_offset = max_offset if @list_scroll_offset > max_offset
+
+          visible_end = @list_scrollable_lines - @list_scroll_offset
+          visible_start = visible_end - @list_body_height
+          visible_start = 0 if visible_start < 0
+          visible_count = visible_end - visible_start
+
+          rows = Array(String).new(visible_count)
+          visible_count.times do |index|
+            rows << output_list_line(sequences[visible_start + index])
+          end
+
+          footer[-1] = if visible_count == 0
+            "[0 of #{sequences.size} outputs visible]"
+          else
+            "[Outputs #{visible_start + 1}–#{visible_end} of #{sequences.size}]"
+          end
+
+          frame = header.dup
+          frame.concat(rows)
+          frame.concat(footer)
+          write_frame(io, frame, height)
+        end
+
+        private def output_list_line(sequence : UInt64) : String
+          marker = sequence == @selected_sequence ? "*" : " "
+          status = if exit_status = @statuses[sequence]?
+            "EXIT #{exit_status}"
+          else
+            "RUNNING"
+          end
+
+          output = if @statuses.has_key?(sequence) && !@raw_view
+            @clean_outputs[sequence]? || @outputs[sequence]?
+          else
+            @outputs[sequence]?
+          end
+          visible_output_lines = output ? output_lines(output) : [] of String
+          preview = visible_output_lines.first? || "(no output yet)"
+          command = @inputs[sequence].gsub(/[\\r\\n\\t ]+/, " ").strip
+
+          line = "#{marker} ##{sequence} [#{status}] #{visible_output_lines.size} lines | #{command} → #{preview}"
+          truncate_list_line(line, terminal_width)
+        end
+
+        private def truncate_list_line(line : String, width : Int32) : String
+          return "" if width <= 0
+
+          characters = line.chars
+          return line if characters.size <= width
+          return characters.first(width).join if width == 1
+
+          characters.first(width - 1).join + "…"
+        end
+
+        private def terminal_width : Int32
+          width = Tmux::Pane.from_env.width
+          width > 0 ? width : 80
+        rescue
+          ENV["COLUMNS"]?.try(&.to_i?) || 80
+        end
+
       end
     
       # Render the selected input as a fixed header, scrollable viewport, and footer.
@@ -407,6 +499,11 @@ module Output
         @mutex.synchronize do
           screen_height = height || terminal_height
           screen_height = 1 if screen_height < 1
+      
+          if @list_view
+            render_output_list(io, screen_height)
+            next
+          end
       
           unless selected = @selected_sequence
             write_frame(io, ["No inputs yet."], screen_height)
@@ -433,6 +530,7 @@ module Output
       
           case event["type"].as_s
           when "input"
+            @list_scroll_offset += 1 if @list_view && @list_scroll_offset > 0
             @scroll_offset = 0 if @selected_sequence != sequence
             @inputs[sequence] = event["command"].as_s
             @selected_sequence = sequence
@@ -456,9 +554,12 @@ module Output
             end
           when "toggle_view"
             @raw_view = !@raw_view
+          when "toggle_list_view"
+            @list_view = !@list_view
+            @list_scroll_offset = 0
           when "scroll"
             if action = scroll_action(event["action"].as_s)
-              scroll_locked(action)
+              scroll_current_view_locked(action)
             end
           end
         end
@@ -471,6 +572,10 @@ module Output
     @statuses = {} of UInt64 => Int32
     @selected_sequence : UInt64?
     @raw_view = false
+    @list_view = false
+    @list_scroll_offset = 0
+    @list_body_height = 1
+    @list_scrollable_lines = 0
     @scroll_offset = 0
     @body_height = 1
     @scrollable_lines = 0
