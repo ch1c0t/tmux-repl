@@ -50,7 +50,7 @@ end
 
 # Reserve the final footer row for the viewport's line-range summary.
 private def footer_lines(sequence : UInt64) : Array(String)
-  lines = ["[Up/Down: scroll; PageUp/PageDown: page]"]
+  lines = ["[Ctrl+O: list outputs · Up/Down: scroll; PageUp/PageDown: page]"]
   lines << "[exit status: #{@statuses[sequence]}]" if status = @statuses[sequence]?
   lines << ""
   lines
@@ -136,4 +136,95 @@ private def write_frame(io : IO, lines : Array(String), height : Int32) : Nil
   end
   io.print output
   io.flush
+end
+
+# Show every submitted input with its execution state and a short output preview.
+private def render_output_list(io : IO, height : Int32) : Nil
+  sequences = @inputs.keys.sort
+  if sequences.empty?
+    write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+O: return]"], height)
+    next
+  end
+
+  header = [
+    "AVAILABLE OUTPUTS (#{sequences.size})",
+    "[Up/Down: scroll · PageUp/PageDown: page · Ctrl+O: return]",
+    "─" * 40,
+  ]
+  footer = [
+    "* = currently displayed output",
+    "",
+  ]
+
+  footer = footer.last(height)
+  header_limit = height - footer.size - 1
+  header_limit = 0 if header_limit < 0
+  header = header.first(header_limit) if header.size > header_limit
+
+  @list_body_height = height - header.size - footer.size
+  @list_scrollable_lines = sequences.size
+
+  max_offset = @list_scrollable_lines - @list_body_height
+  max_offset = 0 if max_offset < 0
+  @list_scroll_offset = 0 if @list_scroll_offset < 0
+  @list_scroll_offset = max_offset if @list_scroll_offset > max_offset
+
+  visible_end = @list_scrollable_lines - @list_scroll_offset
+  visible_start = visible_end - @list_body_height
+  visible_start = 0 if visible_start < 0
+  visible_count = visible_end - visible_start
+
+  rows = Array(String).new(visible_count)
+  visible_count.times do |index|
+    rows << output_list_line(sequences[visible_start + index])
+  end
+
+  footer[-1] = if visible_count == 0
+    "[0 of #{sequences.size} outputs visible]"
+  else
+    "[Outputs #{visible_start + 1}–#{visible_end} of #{sequences.size}]"
+  end
+
+  frame = header.dup
+  frame.concat(rows)
+  frame.concat(footer)
+  write_frame(io, frame, height)
+end
+
+private def output_list_line(sequence : UInt64) : String
+  marker = sequence == @selected_sequence ? "*" : " "
+  status = if exit_status = @statuses[sequence]?
+    "EXIT #{exit_status}"
+  else
+    "RUNNING"
+  end
+
+  output = if @statuses.has_key?(sequence) && !@raw_view
+    @clean_outputs[sequence]? || @outputs[sequence]?
+  else
+    @outputs[sequence]?
+  end
+  output_lines = output ? self.output_lines(output) : [] of String
+  preview = output_lines.first? || "(no output yet)"
+  command = @inputs[sequence].gsub(/[\\r\\n\\t ]+/, " ").strip
+
+  line = "#{marker} ##{sequence} [#{status}] #{output_lines.size} lines | #{command} → #{preview}"
+  truncate_list_line(line, terminal_width)
+end
+
+private def truncate_list_line(line : String, width : Int32) : String
+  return "" if width <= 0
+
+  characters = line.chars
+  return line if characters.size <= width
+  return characters.first(width).join if width == 1
+
+  characters.first(width - 1).join + "…"
+end
+
+private def terminal_width : Int32
+  width = Tmux::Pane.from_env.width
+  width > 0 ? width : 80
+rescue
+  ENV["COLUMNS"]?.try(&.to_i?) || 80
 end
