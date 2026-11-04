@@ -1,5 +1,6 @@
 enum Action
   ToggleOutputView
+  ToggleOutputList
   SelectPrevious
   SelectNext
   SubmitInput
@@ -43,6 +44,12 @@ BINDINGS = [
     Action::ToggleOutputView,
     "Ctrl+G",
     "Toggle stripped/raw output from either pane."
+  ),
+  Binding.new(
+    '\u000f',
+    Action::ToggleOutputList,
+    "Ctrl+O",
+    "Toggle the available-outputs list from either pane."
   ),
 ]
 
