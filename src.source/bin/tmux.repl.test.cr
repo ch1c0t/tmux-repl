@@ -88,6 +88,8 @@ class SmokeTest
       step("Down in the output pane scrolls by one line") do
         output_pane.send_keys("Down", enter: false)
         expect_output("SMOKE_SCROLL_LINE_02")
+        output_pane.send_keys("Up", enter: false)
+        expect_output("SMOKE_SCROLL_LINE_01")
       end
       step("PageDown in the output pane returns to the latest lines") do
         4.times { output_pane.send_keys("PageDown", enter: false) }
@@ -172,6 +174,7 @@ class SmokeTest
 
   private def expect_output(*expected : String, timeout : Time::Span = TIMEOUT) : Nil
     last_text = ""
+    expected = expected.to_a
     found = wait_until(timeout) do
       last_text = pane_text(output_pane)
       expected.all? { |text| last_text.includes?(text) }
@@ -206,7 +209,7 @@ class SmokeTest
     yield
   end
 
-  private def step(name : String, &block : ->) : Nil
+  private def step(name : String, &block : -> Nil) : Nil
     @stage = name
     started_at = Time.instant
     yield
