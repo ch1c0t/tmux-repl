@@ -1,6 +1,21 @@
 require "../../src/output"
 
 describe Output::View do
+  it "redraws rows in place without clearing the entire pane" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"echo hello"})))
+    output = IO::Memory.new
+
+    view.render(output, height: 8)
+
+    frame = output.to_s
+    frame.should_not contain("\e[2J")
+    frame.should contain("\e[1;1H")
+    frame.should contain("\e[8;1H")
+    frame.should contain("\e[0K")
+    frame.scan(/\e\[(\d+);1H/).map(&.[1]).should eq((1..8).map(&.to_s))
+  end
+
   it "shows an empty view before any input is submitted" do
     view = Output::View.new
     output = IO::Memory.new
