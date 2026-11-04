@@ -282,6 +282,7 @@ module Output
       
           footer = ["[Up/Down: scroll; PageUp/PageDown: page]"]
           footer << "[exit status: #{@statuses[selected]}]" if status = @statuses[selected]?
+          footer << "[Output lines]"
       
           # Keep the footer visible even when a long command leaves little room for output.
           footer = footer.last(screen_height)
@@ -298,6 +299,19 @@ module Output
           visible_end = @scrollable_lines - @scroll_offset
           visible_start = visible_end - @body_height
           visible_start = 0 if visible_start < 0
+      
+          # Count logical lines in the currently selected representation. The running
+          # placeholder is deliberately excluded from the output line count.
+          output_line_count = displayed_output.nil? ? 0 : body.size
+          visible_line_count = visible_end - visible_start
+          line_summary = if output_line_count == 0
+            completed ? "[0 output lines]" : "[0 output lines so far]"
+          else
+            last_visible_line = visible_start + visible_line_count
+            progress = completed ? "" : " so far"
+            "[Output lines #{visible_start + 1}–#{last_visible_line} of #{output_line_count}#{progress}]"
+          end
+          footer[-1] = line_summary
       
           frame = header.dup
           index = visible_start
