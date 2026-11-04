@@ -139,6 +139,62 @@ describe Output::View do
     output.to_s.should contain("[0 of 4 output lines visible]")
   end
 
+
+  it "toggles an overview of all available outputs" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"echo first"})))
+    view.update(JSON.parse({"type" => "output", "sequence" => 1, "chunk" => "first result\\n"}.to_json))
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "first result\\n"}.to_json))
+    view.update(JSON.parse(%({"type":"input","sequence":2,"command":"echo second"})))
+    view.update(JSON.parse({"type" => "output", "sequence" => 2, "chunk" => "second result\\n"}.to_json))
+    view.update(JSON.parse(%({"type":"toggle_list_view","sequence":0})))
+
+    list = IO::Memory.new
+    view.render(list, height: 10)
+
+    list.to_s.should contain("AVAILABLE OUTPUTS (2)")
+    list.to_s.should contain("* #2 [RUNNING] 1 lines")
+    list.to_s.should contain("echo second → second result")
+    list.to_s.should contain("  #1 [EXIT 0] 1 lines")
+    list.to_s.should contain("echo first → first result")
+    list.to_s.should contain("Ctrl+O: return")
+
+    view.update(JSON.parse(%({"type":"toggle_list_view","sequence":0})))
+    selected = IO::Memory.new
+    view.render(selected, height: 10)
+    selected.to_s.should contain("INPUT #2")
+    selected.to_s.should contain("second result")
+    selected.to_s.should_not contain("AVAILABLE OUTPUTS")
+  end
+
+  it "scrolls the available-outputs list independently from the selected output" do
+    view = Output::View.new
+    (1..6).each do |sequence|
+      view.update(JSON.parse({"type" => "input", "sequence" => sequence, "command" => "command #{sequence}"}.to_json))
+      view.update(JSON.parse({"type" => "output", "sequence" => sequence, "chunk" => "result #{sequence}"}.to_json))
+      view.update(JSON.parse({"type" => "complete", "sequence" => sequence, "status" => 0, "clean_output" => "result #{sequence}"}.to_json))
+    end
+    view.update(JSON.parse(%({"type":"toggle_list_view","sequence":0})))
+
+    latest = IO::Memory.new
+    view.render(latest, height: 7)
+    latest.to_s.should contain("#5")
+    latest.to_s.should contain("#6")
+    latest.to_s.should_not contain("#1")
+
+    view.update(JSON.parse({"type" => "scroll", "sequence" => 0, "action" => "ScrollPageUp"}.to_json))
+    earlier = IO::Memory.new
+    view.render(earlier, height: 7)
+    earlier.to_s.should contain("#4")
+    earlier.to_s.should_not contain("#6")
+
+    view.update(JSON.parse(%({"type":"toggle_list_view","sequence":0})))
+    current = IO::Memory.new
+    view.render(current, height: 7)
+    current.to_s.should contain("INPUT #6")
+    current.to_s.should_not contain("AVAILABLE OUTPUTS")
+  end
+
   it "shows the selected input and ignores selection of an unknown input" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"first"})))
