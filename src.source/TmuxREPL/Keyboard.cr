@@ -139,5 +139,10 @@ def self.label_for(action : Action) : String
 end
 
 def self.help_text : String
-  (BINDINGS.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
+  toggle_help = "Ctrl+G: raw/stripped · Ctrl+L: list"
+  bindings = BINDINGS.reject do |binding|
+    binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList
+  end
+
+  ([toggle_help] + bindings.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
 end
