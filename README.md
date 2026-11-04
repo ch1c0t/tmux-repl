@@ -14,7 +14,7 @@ reply and crystal.pty are never imported by the same executable.
 - tmux.repl.output renders the selected input and its associated output.
 - tmux.repl.worker executes commands through PTY::Session and publishes output.
 
-Build all four executables with:
+Build the executables with:
 
     shards build
 
@@ -120,6 +120,18 @@ REPL uses global-amqp_channel for AMQP communication.
     crystal spec
 
 The API end-to-end spec starts a separate Tmux server using a unique socket.
+
+### Interactive smoke test
+
+Build with `shards build`, then run `./bin/tmux.repl.test` from inside the
+Tmux session you want to return to. The smoke test runs `./bin/tmux.repl start`,
+submits sample commands, and checks command selection, RAW/STRIPPED toggling,
+the available-outputs list, and scrolling from both panes. The test session is
+shown while the checks run, then left open; the client switches back to the
+original session to display the report.
+
+Set `TMUX_REPL_TEST_DELAY` to adjust the pause after each check (seconds,
+default `0.8`) so there is more or less time to observe the session.
 
 ### Tracing command latency
 
