@@ -128,6 +128,17 @@ describe Output::View do
     later.to_s.should contain("[Output lines 9–10 of 10]")
   end
 
+  it "reports when the pane is too short to show any output lines" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"generate output"})))
+    view.update(JSON.parse({"type" => "output", "sequence" => 1, "chunk" => "one\ntwo\nthree\nfour"}.to_json))
+
+    output = IO::Memory.new
+    view.render(output, height: 1)
+
+    output.to_s.should contain("[0 of 4 output lines visible]")
+  end
+
   it "shows the selected input and ignores selection of an unknown input" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"first"})))
@@ -153,12 +164,14 @@ describe Output::View do
     view.render(initial, height: 8)
     initial.to_s.should contain("OUTPUT_LINE_10")
     initial.to_s.should_not contain("OUTPUT_LINE_01")
+    initial.to_s.should contain("[Output lines 9–10 of 10]")
 
     view.scroll(TmuxREPL::Keyboard::Action::ScrollPageUp).should be_true
     earlier = IO::Memory.new
     view.render(earlier, height: 8)
     earlier.to_s.should contain("OUTPUT_LINE_08")
     earlier.to_s.should_not contain("OUTPUT_LINE_10")
+    earlier.to_s.should contain("[Output lines 8–9 of 10]")
     earlier.to_s.should contain("INPUT #1")
     earlier.to_s.should contain("[exit status: 0]")
 
@@ -166,6 +179,7 @@ describe Output::View do
     higher = IO::Memory.new
     view.render(higher, height: 8)
     higher.to_s.should contain("OUTPUT_LINE_07")
+    higher.to_s.should contain("[Output lines 7–8 of 10]")
 
     2.times { view.scroll(TmuxREPL::Keyboard::Action::ScrollPageDown) }
     latest = IO::Memory.new
