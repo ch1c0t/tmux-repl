@@ -52,6 +52,7 @@ def render(io : IO = STDOUT, height : Int32? = nil) : Nil
     # Keep the footer visible even when a long command leaves little room for output.
     footer = footer.last(screen_height)
     header_limit = screen_height - footer.size - 1
+    header_limit = 0 if header_limit < 0
     header = header.first(header_limit) if header.size > header_limit
     @body_height = screen_height - header.size - footer.size
     @scrollable_lines = body.size
@@ -71,6 +72,8 @@ def render(io : IO = STDOUT, height : Int32? = nil) : Nil
     visible_line_count = visible_end - visible_start
     line_summary = if output_line_count == 0
       completed ? "[0 output lines]" : "[0 output lines so far]"
+    elsif visible_line_count == 0
+      "[0 of #{output_line_count} output lines visible]"
     else
       last_visible_line = visible_start + visible_line_count
       progress = completed ? "" : " so far"
