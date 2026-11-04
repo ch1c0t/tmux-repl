@@ -25,6 +25,22 @@ describe Output::View do
     output.to_s.should contain("No inputs yet.")
   end
 
+  it "reports zero output lines without counting the running placeholder" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"wait for output"})))
+
+    streaming = IO::Memory.new
+    view.render(streaming, height: 8)
+    streaming.to_s.should contain("(running...)")
+    streaming.to_s.should contain("[0 output lines so far]")
+
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => ""}.to_json))
+    completed = IO::Memory.new
+    view.render(completed, height: 8)
+    completed.to_s.should contain("[0 output lines]")
+    completed.to_s.should_not contain("[0 output lines so far]")
+  end
+
   it "shows the newest input while it is running" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"echo hello"})))
@@ -47,6 +63,7 @@ describe Output::View do
     view.render(streaming)
     streaming.to_s.should contain("START_MARK_123")
     streaming.to_s.should contain("tick")
+    streaming.to_s.should contain("[Output lines 1–4 of 4 so far]")
 
     view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "tick\n"}.to_json))
 
@@ -56,6 +73,7 @@ describe Output::View do
     stripped.to_s.should_not contain("START_MARK_123")
     stripped.to_s.should_not contain("END_MARK_123")
     stripped.to_s.should contain("[exit status: 0]")
+    stripped.to_s.should contain("[Output lines 1–1 of 1]")
   end
 
   it "handles a view-toggle event published by the input pane" do
@@ -74,12 +92,14 @@ describe Output::View do
     view.render(raw)
     raw.to_s.should contain("START_MARK_1")
     raw.to_s.should contain("END_MARK_1")
+    raw.to_s.should contain("[Output lines 1–3 of 3]")
 
     view.update(JSON.parse(%({"type":"toggle_view","sequence":0})))
     stripped_again = IO::Memory.new
     view.render(stripped_again)
     stripped_again.to_s.should contain("clean data")
     stripped_again.to_s.should_not contain("START_MARK_1")
+    stripped_again.to_s.should contain("[Output lines 1–1 of 1]")
   end
 
   it "handles scroll events published by the input pane" do
@@ -92,17 +112,20 @@ describe Output::View do
     view.render(initial, height: 8)
     initial.to_s.should contain("OUTPUT_LINE_10")
     initial.to_s.should_not contain("OUTPUT_LINE_01")
+    initial.to_s.should contain("[Output lines 9–10 of 10]")
 
     view.update(JSON.parse(%({"type":"scroll","sequence":0,"action":"ScrollPageUp"})))
     earlier = IO::Memory.new
     view.render(earlier, height: 8)
-    earlier.to_s.should contain("OUTPUT_LINE_06")
+    earlier.to_s.should contain("OUTPUT_LINE_08")
     earlier.to_s.should_not contain("OUTPUT_LINE_10")
+    earlier.to_s.should contain("[Output lines 8–9 of 10]")
 
     view.update(JSON.parse(%({"type":"scroll","sequence":0,"action":"ScrollDown"})))
     later = IO::Memory.new
     view.render(later, height: 8)
-    later.to_s.should contain("OUTPUT_LINE_07")
+    later.to_s.should contain("OUTPUT_LINE_10")
+    later.to_s.should contain("[Output lines 9–10 of 10]")
   end
 
   it "shows the selected input and ignores selection of an unknown input" do
@@ -134,7 +157,7 @@ describe Output::View do
     view.scroll(TmuxREPL::Keyboard::Action::ScrollPageUp).should be_true
     earlier = IO::Memory.new
     view.render(earlier, height: 8)
-    earlier.to_s.should contain("OUTPUT_LINE_06")
+    earlier.to_s.should contain("OUTPUT_LINE_08")
     earlier.to_s.should_not contain("OUTPUT_LINE_10")
     earlier.to_s.should contain("INPUT #1")
     earlier.to_s.should contain("[exit status: 0]")
@@ -142,11 +165,12 @@ describe Output::View do
     view.scroll(TmuxREPL::Keyboard::Action::ScrollUp).should be_true
     higher = IO::Memory.new
     view.render(higher, height: 8)
-    higher.to_s.should contain("OUTPUT_LINE_05")
+    higher.to_s.should contain("OUTPUT_LINE_07")
 
     2.times { view.scroll(TmuxREPL::Keyboard::Action::ScrollPageDown) }
     latest = IO::Memory.new
     view.render(latest, height: 8)
     latest.to_s.should contain("OUTPUT_LINE_10")
+    latest.to_s.should contain("[Output lines 9–10 of 10]")
   end
 end
