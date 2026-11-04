@@ -232,41 +232,40 @@ module Output
 
   class View
     module Render
-      struct Viewport
-        # The viewport owns scrolling, visible-line selection, and logical line numbering.
-        getter lines : Array(String)
-        getter total_lines : Int32
-        getter first_line : Int32?
-        getter last_line : Int32?
-        
-        def initialize(
-          @lines : Array(String),
-          @total_lines : Int32,
-          @first_line : Int32?,
-          @last_line : Int32?
-        )
-        end
-        
-        def line_summary(completed : Bool) : String
-          if @total_lines == 0
-            completed ? "[0 output lines]" : "[0 output lines so far]"
-          elsif first = @first_line
-            last = @last_line.not_nil!
-            progress = completed ? "" : " so far"
-            "[Output lines #{first}–#{last} of #{@total_lines}#{progress}]"
-          else
-            "[0 of #{@total_lines} output lines visible]"
-          end
+      # The viewport owns scrolling, visible-line selection, and logical line numbering.
+      getter lines : Array(String)
+      getter total_lines : Int32
+      getter first_line : Int32?
+      getter last_line : Int32?
+      
+      def initialize(
+        @lines : Array(String),
+        @total_lines : Int32,
+        @first_line : Int32?,
+        @last_line : Int32?
+      )
+      end
+      
+      def line_summary(completed : Bool) : String
+        if @total_lines == 0
+          completed ? "[0 output lines]" : "[0 output lines so far]"
+        elsif first = @first_line
+          last = @last_line.not_nil!
+          progress = completed ? "" : " so far"
+          "[Output lines #{first}–#{last} of #{@total_lines}#{progress}]"
+        else
+          "[0 of #{@total_lines} output lines visible]"
         end
       end
-    
+
       module Private
         # Assemble the four visible components for one selected input.
         private def render_selected(
           io : IO,
           sequence : UInt64,
           command : String,
-          screen_height : Int32
+          screen_height : Int32,
+          screen_width : Int32
         ) : Nil
           completed = @statuses.has_key?(sequence)
           displayed_output, mode_label = displayed_output_for(sequence, completed)
@@ -275,10 +274,10 @@ module Output
           footer = footer_lines(sequence)
         
           header, footer, body_height = fit_sections(header, footer, screen_height)
-          viewport = build_viewport(displayed_output, completed, body_height)
+          viewport = build_viewport(displayed_output, completed, body_height, screen_width)
           footer[-1] = viewport.line_summary(completed)
         
-          write_frame(io, compose_frame(header, viewport, footer), screen_height)
+          write_frame(io, compose_frame(header, viewport, footer), screen_height, screen_width)
         end
         
         # Choose the transcript representation and its matching mode label.
@@ -303,17 +302,22 @@ module Output
         
         # The header is pinned while the output viewport scrolls.
         private def header_lines(sequence : UInt64, command : String, mode_label : String) : Array(String)
-          toggle_key = TmuxREPL::Keyboard.label_for(TmuxREPL::Keyboard::Action::ToggleOutputView)
+          wrap_label = @wrap_lines ? "WRAP" : "NO-WRAP"
           [
-            "INPUT ##{sequence} [#{mode_label}; #{toggle_key} toggles view]",
+            "INPUT ##{sequence} [#{mode_label}; #{wrap_label}]",
             *output_lines(command),
             "─" * 40,
           ]
         end
         
-        # Reserve the final footer row for the viewport's line-range summary.
+        # Keep the footer to one control row plus the exit status and line summary.
         private def footer_lines(sequence : UInt64) : Array(String)
-          lines = ["[Ctrl+L: list outputs · Up/Down: scroll; PageUp/PageDown: page]"]
+          controls = if @wrap_lines
+            "[WRAP · Up/Down: scroll · Ctrl+W: no-wrap · Ctrl+L: list]"
+          else
+            "[NO-WRAP · ←/→: horizontal · Home/End: edges · Ctrl+W: wrap]"
+          end
+          lines = [controls]
           lines << "[exit status: #{@statuses[sequence]}]" if status = @statuses[sequence]?
           lines << ""
           lines
@@ -338,7 +342,8 @@ module Output
         private def build_viewport(
           displayed_output : String?,
           completed : Bool,
-          height : Int32
+          height : Int32,
+          width : Int32
         ) : Viewport
           body = if output = displayed_output
             output_lines(output)
@@ -348,8 +353,18 @@ module Output
             [] of String
           end
         
+          if !@wrap_lines
+            widest_line = body.max_of? { |line| display_width(line) } || 0
+            max_offset = widest_line - (width - 1)
+            max_offset = 0 if max_offset < 0
+            @horizontal_offset = max_offset if @horizontal_offset > max_offset
+          else
+            @horizontal_offset = 0
+          end
+        
+          rows = viewport_rows(body, width)
           @body_height = height
-          @scrollable_lines = body.size
+          @scrollable_lines = rows.size
         
           max_offset = @scrollable_lines - @body_height
           max_offset = 0 if max_offset < 0
@@ -361,18 +376,144 @@ module Output
           visible_start = 0 if visible_start < 0
           visible_count = visible_end - visible_start
         
-          visible_lines = Array(String).new(visible_count) do |index|
-            body[visible_start + index]
+          visible_lines = [] of String
+          first_line : Int32? = nil
+          last_line : Int32? = nil
+          visible_count.times do |index|
+            row = rows[visible_start + index]
+            visible_lines << row[0]
+            logical_line = row[1] + 1
+            first_line ||= logical_line
+            last_line = logical_line
           end
         
           # The running placeholder occupies a screen row, but is not output data.
           total_lines = displayed_output.nil? ? 0 : body.size
-          first_line = if total_lines > 0 && visible_count > 0
-            visible_start + 1
-          end
-          last_line = first_line ? visible_start + visible_count : nil
-        
           Viewport.new(visible_lines, total_lines, first_line, last_line)
+        end
+        
+        # Convert logical lines into terminal rows while retaining their original line numbers.
+        private def viewport_rows(lines : Array(String), width : Int32) : Array(Tuple(String, Int32))
+          rows = [] of Tuple(String, Int32)
+          lines.each_with_index do |line, index|
+            rendered = if @wrap_lines
+              wrap_line(line, width)
+            else
+              [horizontal_line(line, width)]
+            end
+            rendered.each { |row| rows << {row, index} }
+          end
+          rows
+        end
+        
+        private def viewport_row_count(text : String, width : Int32) : Int32
+          viewport_rows(output_lines(text), width).size
+        end
+        
+        # Split a logical line without losing or rewriting its original content.
+        private def wrap_line(line : String, width : Int32) : Array(String)
+          width = 1 if width < 1
+          rows = [] of String
+          current = [] of Char
+          current_width = 0
+        
+          line.each_char do |char|
+            char_width = terminal_character_width(char)
+            if current_width > 0 && current_width + char_width > width
+              rows << current.join
+              current.clear
+              current_width = 0
+            end
+            current << char
+            current_width += char_width
+          end
+        
+          rows << current.join
+          rows
+        end
+        
+        # Keep a single visual row and mark hidden content at either edge.
+        private def horizontal_line(line : String, width : Int32) : String
+          line_width = display_width(line)
+          return line if @horizontal_offset == 0 && line_width <= width
+        
+          left_marker = @horizontal_offset > 0
+          content_width = width - (left_marker ? 1 : 0)
+          remaining_width = line_width - @horizontal_offset
+          right_marker = remaining_width > content_width
+          content_width -= 1 if right_marker
+          content = slice_display_columns(line, @horizontal_offset, content_width)
+        
+          String.build do |buffer|
+            buffer << "‹" if left_marker
+            buffer << content
+            buffer << "›" if right_marker
+          end
+        end
+        
+        private def display_width(text : String) : Int32
+          width = 0
+          text.each_char { |char| width += terminal_character_width(char) }
+          width
+        end
+        
+        # Approximate terminal cell width: combining marks are zero, East Asian wide
+        # characters and emoji are two, and ordinary printable characters are one.
+        private def terminal_character_width(char : Char) : Int32
+          codepoint = char.ord
+        
+          return 0 if codepoint < 0x20 || (codepoint >= 0x7f && codepoint < 0xa0)
+          return 0 if (0x0300..0x036f).includes?(codepoint) ||
+                      (0x1ab0..0x1aff).includes?(codepoint) ||
+                      (0x1dc0..0x1dff).includes?(codepoint) ||
+                      (0x20d0..0x20ff).includes?(codepoint) ||
+                      (0xfe00..0xfe0f).includes?(codepoint) ||
+                      (0xfe20..0xfe2f).includes?(codepoint) ||
+                      (0xe0100..0xe01ef).includes?(codepoint) ||
+                      codepoint == 0x200d
+        
+          return 2 if (0x1100..0x115f).includes?(codepoint) ||
+                      codepoint == 0x2329 || codepoint == 0x232a ||
+                      (0x2e80..0xa4cf).includes?(codepoint) ||
+                      (0xac00..0xd7a3).includes?(codepoint) ||
+                      (0xf900..0xfaff).includes?(codepoint) ||
+                      (0xfe10..0xfe19).includes?(codepoint) ||
+                      (0xfe30..0xfe6f).includes?(codepoint) ||
+                      (0xff00..0xff60).includes?(codepoint) ||
+                      (0xffe0..0xffe6).includes?(codepoint) ||
+                      (0x1f300..0x1faff).includes?(codepoint) ||
+                      (0x20000..0x3fffd).includes?(codepoint)
+        
+          1
+        end
+        
+        # Extract only complete characters that fit in the requested display columns.
+        private def slice_display_columns(text : String, start_column : Int32, width : Int32) : String
+          return "" if width <= 0
+        
+          column = 0
+          visible_width = 0
+          String.build do |buffer|
+            text.each_char do |char|
+              char_width = terminal_character_width(char)
+        
+              if column + char_width <= start_column
+                column += char_width
+                next
+              end
+        
+              if column < start_column && char_width > 0
+                column += char_width
+                next
+              end
+        
+              break if char_width > 0 && visible_width + char_width > width
+        
+              buffer << char
+              visible_width += char_width
+              column += char_width
+            end
+          end
         end
         
         # Compose fixed sections around the viewport without changing their contents.
@@ -387,13 +528,13 @@ module Output
           frame
         end
         
-        # Rewrite each row in place and flush once per complete frame.
-        private def write_frame(io : IO, lines : Array(String), height : Int32) : Nil
+        # Rewrite each row in place, clipping it before the terminal can auto-wrap it.
+        private def write_frame(io : IO, lines : Array(String), height : Int32, width : Int32) : Nil
           output = String.build do |buffer|
             height.times do |index|
               line = lines[index]? || ""
               buffer << "\e[" << (index + 1) << ";1H"
-              buffer << line
+              buffer << fit_frame_line(line, width)
               buffer << "\e[0K"
             end
           end
@@ -401,11 +542,18 @@ module Output
           io.flush
         end
         
+        private def fit_frame_line(line : String, width : Int32) : String
+          return "" if width <= 0
+          return line if display_width(line) <= width
+        
+          slice_display_columns(line, 0, width - 1) + "…"
+        end
+        
         # Show every submitted input with its execution state and a short output preview.
-        private def render_output_list(io : IO, height : Int32) : Nil
+        private def render_output_list(io : IO, height : Int32, width : Int32) : Nil
           sequences = @inputs.keys.sort
           if sequences.empty?
-            write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+L: return]"], height)
+            write_frame(io, ["AVAILABLE OUTPUTS (0)", "No outputs have been submitted.", "[Ctrl+L: return]"], height, width)
             return
           end
         
@@ -439,7 +587,7 @@ module Output
         
           rows = Array(String).new(visible_count)
           visible_count.times do |index|
-            rows << output_list_line(sequences[visible_start + index])
+            rows << output_list_line(sequences[visible_start + index], width)
           end
         
           footer[-1] = if visible_count == 0
@@ -451,10 +599,10 @@ module Output
           frame = header.dup
           frame.concat(rows)
           frame.concat(footer)
-          write_frame(io, frame, height)
+          write_frame(io, frame, height, width)
         end
         
-        private def output_list_line(sequence : UInt64) : String
+        private def output_list_line(sequence : UInt64, width : Int32) : String
           marker = sequence == @selected_sequence ? "*" : " "
           status = if exit_status = @statuses[sequence]?
             "EXIT #{exit_status}"
@@ -472,17 +620,20 @@ module Output
           command = @inputs[sequence].gsub(/[\r\n\t ]+/, " ").strip
         
           line = "#{marker} ##{sequence} [#{status}] #{visible_output_lines.size} lines | #{command} → #{preview}"
-          truncate_list_line(line, terminal_width)
+          truncate_list_line(line, width)
         end
         
         private def truncate_list_line(line : String, width : Int32) : String
           return "" if width <= 0
+          return line if display_width(line) <= width
+          return slice_display_columns(line, 0, width) if width == 1
         
-          characters = line.chars
-          return line if characters.size <= width
-          return characters.first(width).join if width == 1
+          slice_display_columns(line, 0, width - 1) + "…"
+        end
         
-          characters.first(width - 1).join + "…"
+        private def usable_width(width : Int32) : Int32
+          width = width - 1
+          width > 0 ? width : 1
         end
         
         private def terminal_width : Int32
@@ -492,35 +643,38 @@ module Output
           ENV["COLUMNS"]?.try(&.to_i?) || 80
         end
       end
-    
+
       # Render the selected input as a fixed header, scrollable viewport, and footer.
-      def render(io : IO = STDOUT, height : Int32? = nil) : Nil
+      def render(io : IO = STDOUT, height : Int32? = nil, width : Int32? = nil) : Nil
         @mutex.synchronize do
           screen_height = height || terminal_height
           screen_height = 1 if screen_height < 1
+          screen_width = usable_width(width || terminal_width)
+          @render_width = screen_width
       
           if @list_view
-            render_output_list(io, screen_height)
+            render_output_list(io, screen_height, screen_width)
             next
           end
       
           unless selected = @selected_sequence
-            write_frame(io, ["No inputs yet."], screen_height)
+            write_frame(io, ["No inputs yet."], screen_height, screen_width)
             next
           end
       
           unless command = @inputs[selected]?
-            write_frame(io, ["Waiting for input ##{selected}..."], screen_height)
+            write_frame(io, ["Waiting for input ##{selected}..."], screen_height, screen_width)
             next
           end
       
-          render_selected(io, selected, command, screen_height)
+          render_selected(io, selected, command, screen_height, screen_width)
         end
       end
       
       include Private
+      include Private
     end
-  
+
     module Update
       # Apply one event from the session event stream to the displayed view.
       def update(event : JSON::Any) : Nil
@@ -531,19 +685,21 @@ module Output
           when "input"
             @list_scroll_offset += 1 if @list_view && @list_scroll_offset > 0
             @scroll_offset = 0 if @selected_sequence != sequence
+            @horizontal_offset = 0 if @selected_sequence != sequence
             @inputs[sequence] = event["command"].as_s
             @selected_sequence = sequence
           when "select"
             if @inputs.has_key?(sequence) && @selected_sequence != sequence
               @selected_sequence = sequence
               @scroll_offset = 0
+              @horizontal_offset = 0
             end
           when "output"
             chunk = event["chunk"].as_s
             previous = @outputs.fetch(sequence, "")
             updated = previous + chunk
             if sequence == @selected_sequence && @scroll_offset > 0 && !@statuses.has_key?(sequence)
-              @scroll_offset += output_lines(updated).size - output_lines(previous).size
+              @scroll_offset += viewport_row_count(updated, @render_width) - viewport_row_count(previous, @render_width)
             end
             @outputs[sequence] = updated
           when "complete"
@@ -553,6 +709,10 @@ module Output
             end
           when "toggle_view"
             @raw_view = !@raw_view
+          when "toggle_wrap"
+            @wrap_lines = !@wrap_lines
+            @horizontal_offset = 0
+            @scroll_offset = 0
           when "toggle_list_view"
             @list_view = !@list_view
             @list_scroll_offset = 0
@@ -564,7 +724,7 @@ module Output
         end
       end
     end
-  
+
     @inputs = {} of UInt64 => String
     @outputs = {} of UInt64 => String
     @clean_outputs = {} of UInt64 => String
@@ -572,6 +732,9 @@ module Output
     @selected_sequence : UInt64?
     @raw_view = false
     @list_view = false
+    @wrap_lines = true
+    @horizontal_offset = 0
+    @render_width = 79
     @list_scroll_offset = 0
     @list_body_height = 1
     @list_scrollable_lines = 0
@@ -593,7 +756,21 @@ module Output
       end
     end
     
-    # Move the output viewport without moving the pinned command header or status.
+    # Switch between wrapped logical lines and one-row-per-line horizontal inspection.
+    def toggle_wrap : Bool
+      @mutex.synchronize do
+        @wrap_lines = !@wrap_lines
+        @horizontal_offset = 0
+        @scroll_offset = 0
+        @wrap_lines
+      end
+    end
+    
+    def wrap_lines? : Bool
+      @mutex.synchronize { @wrap_lines }
+    end
+    
+    # Move the output viewport vertically or horizontally.
     def scroll(action : TmuxREPL::Keyboard::Action) : Bool
       @mutex.synchronize { scroll_current_view_locked(action) }
     end
@@ -628,6 +805,7 @@ module Output
     
     private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
       previous_offset = @scroll_offset
+      previous_horizontal_offset = @horizontal_offset
       page_step = @body_height - 1
       page_step = 1 if page_step < 1
     
@@ -640,6 +818,14 @@ module Output
         @scroll_offset += page_step
       when TmuxREPL::Keyboard::Action::ScrollPageDown
         @scroll_offset -= page_step
+      when TmuxREPL::Keyboard::Action::ScrollHorizontalLeft
+        @horizontal_offset -= 1 if !@wrap_lines && @horizontal_offset > 0
+      when TmuxREPL::Keyboard::Action::ScrollHorizontalRight
+        @horizontal_offset += 1 if !@wrap_lines && @horizontal_offset < maximum_horizontal_offset
+      when TmuxREPL::Keyboard::Action::ScrollHorizontalStart
+        @horizontal_offset = 0 unless @wrap_lines
+      when TmuxREPL::Keyboard::Action::ScrollHorizontalEnd
+        @horizontal_offset = maximum_horizontal_offset unless @wrap_lines
       end
     
       max_offset = @scrollable_lines - @body_height
@@ -647,15 +833,37 @@ module Output
       @scroll_offset = 0 if @scroll_offset < 0
       @scroll_offset = max_offset if @scroll_offset > max_offset
     
-      @scroll_offset != previous_offset
+      @horizontal_offset = 0 if @wrap_lines
+      @horizontal_offset = maximum_horizontal_offset if @horizontal_offset > maximum_horizontal_offset
+    
+      @scroll_offset != previous_offset || @horizontal_offset != previous_horizontal_offset
+    end
+    
+    private def maximum_horizontal_offset : Int32
+      return 0 if @wrap_lines
+      return 0 unless sequence = @selected_sequence
+    
+      completed = @statuses.has_key?(sequence)
+      displayed_output, _label = displayed_output_for(sequence, completed)
+      return 0 unless output = displayed_output
+    
+      widest_line = output_lines(output).max_of? { |line| display_width(line) } || 0
+      visible_width = @render_width - 1
+      visible_width = 0 if visible_width < 0
+      offset = widest_line - visible_width
+      offset > 0 ? offset : 0
     end
     
     private def scroll_action(name : String) : TmuxREPL::Keyboard::Action?
       case name
-      when "ScrollUp"       then TmuxREPL::Keyboard::Action::ScrollUp
-      when "ScrollDown"     then TmuxREPL::Keyboard::Action::ScrollDown
-      when "ScrollPageUp"   then TmuxREPL::Keyboard::Action::ScrollPageUp
-      when "ScrollPageDown" then TmuxREPL::Keyboard::Action::ScrollPageDown
+      when "ScrollUp"                   then TmuxREPL::Keyboard::Action::ScrollUp
+      when "ScrollDown"                 then TmuxREPL::Keyboard::Action::ScrollDown
+      when "ScrollPageUp"               then TmuxREPL::Keyboard::Action::ScrollPageUp
+      when "ScrollPageDown"             then TmuxREPL::Keyboard::Action::ScrollPageDown
+      when "ScrollHorizontalLeft"       then TmuxREPL::Keyboard::Action::ScrollHorizontalLeft
+      when "ScrollHorizontalRight"      then TmuxREPL::Keyboard::Action::ScrollHorizontalRight
+      when "ScrollHorizontalStart"      then TmuxREPL::Keyboard::Action::ScrollHorizontalStart
+      when "ScrollHorizontalEnd"        then TmuxREPL::Keyboard::Action::ScrollHorizontalEnd
       end
     end
     

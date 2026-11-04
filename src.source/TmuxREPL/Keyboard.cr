@@ -9,6 +9,10 @@ enum Action
   ScrollDown
   ScrollPageUp
   ScrollPageDown
+  ScrollHorizontalLeft
+  ScrollHorizontalRight
+  ScrollHorizontalStart
+  ScrollHorizontalEnd
 end
 
 struct Binding
