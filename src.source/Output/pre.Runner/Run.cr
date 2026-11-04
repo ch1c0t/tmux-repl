@@ -5,6 +5,7 @@ def run : Nil
   consumer_tag : String? = nil
   dispatcher : TmuxREPL::Keyboard::Dispatcher? = nil
   terminal_mode = TmuxREPL::TerminalMode.new
+  cursor_hidden = false
 
   begin
     channel = Global.amqp_channel
@@ -36,6 +37,10 @@ def run : Nil
     dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue, on_action)
     dispatcher.start
 
+    STDOUT.print "\e[?25l"
+    STDOUT.flush
+    cursor_hidden = true
+
     view.render
     watch_keyboard(dispatcher, terminal_mode)
     mark_ready
@@ -48,6 +53,10 @@ def run : Nil
       dispatcher.try &.stop
     ensure
       terminal_mode.restore
+      if cursor_hidden
+        STDOUT.print "\e[?25h"
+        STDOUT.flush
+      end
       unsubscribe(event_queue, consumer_tag)
       cleanup_readiness
     end
