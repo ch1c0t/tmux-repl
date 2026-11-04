@@ -5,6 +5,43 @@ require "global-amqp_channel"
 require "queue"
 
 module TmuxREPL
+  module TraceTiming
+    # Optional timing diagnostics for tracing command latency across the separate
+    # input, worker, and output processes. Disabled unless explicitly requested.
+    def trace_timing_enabled? : Bool
+      ENV["TMUX_REPL_TRACE_TIMING"]? == "1"
+    end
+    
+    def trace_timing(
+      session_name : String,
+      component : String,
+      event : String,
+      started_at : Time::Instant? = nil,
+      details : String = ""
+    ) : Nil
+      return unless trace_timing_enabled?
+    
+      trace_path = ENV["TMUX_REPL_TRACE_FILE"]?
+      unless trace_path
+        base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
+        trace_path = File.join(base, "tmux-repl", session_name, "timing.log")
+      end
+    
+      elapsed = if start = started_at
+        " elapsed_ms=#{(Time.instant - start).total_milliseconds.round(2)}"
+      else
+        ""
+      end
+      detail_suffix = details.empty? ? "" : " #{details}"
+    
+      File.open(trace_path, "a") do |file|
+        file.puts "#{Time.utc} [#{component}] #{event}#{elapsed}#{detail_suffix}"
+      end
+    rescue
+      # Diagnostic tracing must never interfere with REPL command execution.
+    end
+  end
+
   def self.define(name : String, &configure : Definition ->) : Definition
     definition = Definition.new(name)
     yield definition
@@ -30,48 +67,48 @@ module TmuxREPL
   end
   
   def self.publish_message(
-  queue : AMQP::Client::Queue,
-  type : String,
-  session_name : String,
-  sequence : UInt64,
-  command : String? = nil,
-  chunk : String? = nil,
-  status : Int32? = nil,
-  clean_output : String? = nil,
-  action : String? = nil
-) : Nil
-  payload = JSON.build do |json|
-    json.object do
-      json.field "type", type
-      json.field "session", session_name
-      json.field "sequence", sequence
-      json.field "timestamp", Time.utc.to_s
-      json.field "command", command if command
-      json.field "chunk", chunk if chunk
-      json.field "status", status if status
-      json.field "clean_output", clean_output if clean_output
-      json.field "action", action if action
+    queue : AMQP::Client::Queue,
+    type : String,
+    session_name : String,
+    sequence : UInt64,
+    command : String? = nil,
+    chunk : String? = nil,
+    status : Int32? = nil,
+    clean_output : String? = nil,
+    action : String? = nil
+  ) : Nil
+    payload = JSON.build do |json|
+      json.object do
+        json.field "type", type
+        json.field "session", session_name
+        json.field "sequence", sequence
+        json.field "timestamp", Time.utc.to_s
+        json.field "command", command if command
+        json.field "chunk", chunk if chunk
+        json.field "status", status if status
+        json.field "clean_output", clean_output if clean_output
+        json.field "action", action if action
+      end
     end
+    properties = AMQP::Client::Properties.new(delivery_mode: 2)
+    raise "LavinMQ did not confirm publish to stream #{queue.name}" unless queue.publish_confirm(payload, props: properties)
   end
-  properties = AMQP::Client::Properties.new(delivery_mode: 2)
-  raise "LavinMQ did not confirm publish to stream #{queue.name}" unless queue.publish_confirm(payload, props: properties)
-end
-
-def self.publish_event(
-  queue : AMQP::Client::Queue,
-  type : String,
-  session_name : String,
-  sequence : UInt64,
-  command : String? = nil,
-  chunk : String? = nil,
-  status : Int32? = nil,
-  clean_output : String? = nil,
-  action : String? = nil
-) : Nil
-  publish_message(queue, type, session_name, sequence, command, chunk, status, clean_output, action)
-end
-
-def self.publish_command(
+  
+  def self.publish_event(
+    queue : AMQP::Client::Queue,
+    type : String,
+    session_name : String,
+    sequence : UInt64,
+    command : String? = nil,
+    chunk : String? = nil,
+    status : Int32? = nil,
+    clean_output : String? = nil,
+    action : String? = nil
+  ) : Nil
+    publish_message(queue, type, session_name, sequence, command, chunk, status, clean_output, action)
+  end
+  
+  def self.publish_command(
     queue : AMQP::Client::Queue,
     session_name : String,
     sequence : UInt64,
@@ -80,40 +117,7 @@ def self.publish_command(
     publish_message(queue, "command", session_name, sequence, command: command)
   end
   
-  # Optional timing diagnostics for tracing command latency across the separate
-  # input, worker, and output processes. Disabled unless explicitly requested.
-  def self.trace_timing_enabled? : Bool
-    ENV["TMUX_REPL_TRACE_TIMING"]? == "1"
-  end
-  
-  def self.trace_timing(
-    session_name : String,
-    component : String,
-    event : String,
-    started_at : Time::Instant? = nil,
-    details : String = ""
-  ) : Nil
-    return unless trace_timing_enabled?
-  
-    trace_path = ENV["TMUX_REPL_TRACE_FILE"]?
-    unless trace_path
-      base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-      trace_path = File.join(base, "tmux-repl", session_name, "timing.log")
-    end
-  
-    elapsed = if start = started_at
-      " elapsed_ms=#{(Time.instant - start).total_milliseconds.round(2)}"
-    else
-      ""
-    end
-    detail_suffix = details.empty? ? "" : " #{details}"
-  
-    File.open(trace_path, "a") do |file|
-      file.puts "#{Time.utc} [#{component}] #{event}#{elapsed}#{detail_suffix}"
-    end
-  rescue
-    # Diagnostic tracing must never interfere with REPL command execution.
-  end
+  extend TraceTiming
 
   class Definition
     getter name : String
@@ -265,35 +269,35 @@ def self.publish_command(
       ScrollPageUp
       ScrollPageDown
     end
-
+    
     struct Binding
       getter key : Char
       getter action : Action
       getter label : String
       getter description : String
-
+    
       def initialize(@key : Char, @action : Action, @label : String, @description : String)
       end
-
+    
       def help_line : String
         "#{label.ljust(16)}#{description}"
       end
     end
-
+    
     struct SequenceBinding
       getter key : String
       getter action : Action
       getter label : String
       getter description : String
-
+    
       def initialize(@key : String, @action : Action, @label : String, @description : String)
       end
-
+    
       def help_line : String
         "#{label.ljust(16)}#{description}"
       end
     end
-
+    
     BINDINGS = [
       Binding.new(
         '\u0007',
@@ -302,7 +306,7 @@ def self.publish_command(
         "Toggle stripped/raw output from either pane."
       ),
     ]
-
+    
     # Ctrl+Up/Down are the primary input-selection bindings. Alt+K/J are aliases.
     SEQUENCE_BINDINGS = [
       SequenceBinding.new("Ctrl+Up", Action::SelectPrevious, "Ctrl+Up", "Select the previous input."),
@@ -314,7 +318,7 @@ def self.publish_command(
       SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page from either pane."),
       SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page from either pane."),
     ]
-
+    
     # xterm modifier parameter 3 represents Alt combined with the key.
     INPUT_SCROLL_SEQUENCES = {
       "\e[1;3A" => "Alt+Up",
@@ -326,14 +330,14 @@ def self.publish_command(
       "\e\e[5~" => "Alt+PageUp",
       "\e\e[6~" => "Alt+PageDown",
     }
-
+    
     INPUT_SEQUENCE_STRINGS = [
       "\ek", "\ej", "\e[107;3u", "\e[106;3u",
       "\e[1;5A", "\e[1;5B",
       "\e[1;3A", "\e[1;3B", "\e[5;3~", "\e[6;3~",
       "\e\e[A", "\e\e[B", "\e\e[5~", "\e\e[6~",
     ]
-
+    
     # Unmodified keys and their Alt-modified equivalents are accepted in Output.
     OUTPUT_SEQUENCE_BINDINGS = {
       "\e[A"    => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
@@ -349,35 +353,35 @@ def self.publish_command(
       "\e\e[5~" => SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page."),
       "\e\e[6~" => SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page."),
     }
-
+    
     def self.binding_for(key : Char) : Binding?
       BINDINGS.find { |binding| binding.key == key }
     end
-
+    
     def self.sequence_binding_for(key : String) : SequenceBinding?
       SEQUENCE_BINDINGS.find { |binding| binding.key == key }
     end
-
+    
     def self.output_sequence_binding_for(sequence : String) : SequenceBinding?
       OUTPUT_SEQUENCE_BINDINGS[sequence]?
     end
-
+    
     def self.output_sequence_match(input : String) : Tuple(String, SequenceBinding)?
       OUTPUT_SEQUENCE_BINDINGS.each do |sequence, binding|
         return {sequence, binding} if input.starts_with?(sequence)
       end
     end
-
+    
     def self.output_sequence_prefix?(input : String) : Bool
       OUTPUT_SEQUENCE_BINDINGS.keys.any? { |sequence| sequence.starts_with?(input) }
     end
-
+    
     def self.action_for(key : Char) : Action?
       if binding = binding_for(key)
         binding.action
       end
     end
-
+    
     def self.label_for(action : Action) : String
       BINDINGS.each do |binding|
         return binding.label if binding.action == action
@@ -387,11 +391,11 @@ def self.publish_command(
       end
       raise ArgumentError.new("No keyboard binding registered for #{action}")
     end
-
+    
     def self.help_text : String
       (BINDINGS.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
     end
-
+  
     class InputIO(T) < IO
       @source_buffer = Bytes.new(8192)
       @read_buffer = Bytes.new(8192 * 3)
@@ -400,23 +404,23 @@ def self.publish_command(
       @source_offset = 0
       @navigation_bindings = [] of SequenceBinding
       @eof = false
-
+      
       def initialize(
         @source : T,
         @keyboard : Dispatcher? = nil
       )
       end
-
+      
       def read(slice : Bytes) : Int32
         return 0 if slice.empty?
-
+      
         refill if @source_offset >= @source_size && !@eof
         return 0 if @source_offset >= @source_size
-
+      
         available = @source_size - @source_offset
         count = bytes_before_line_ending(available)
         count = Math.min(count, slice.size)
-
+      
         slice[0, count].copy_from(@read_buffer[@source_offset, count])
         @source_offset += count
         if keyboard = @keyboard
@@ -424,22 +428,22 @@ def self.publish_command(
         end
         count
       end
-
+      
       # Reply reports native Ctrl arrows and translated Alt+K/J through its existing
       # callbacks. Preserve the original binding so the dispatcher can trace the key.
       def take_navigation_binding(action : Action) : SequenceBinding?
         return if @navigation_bindings.empty?
-
+      
         binding = @navigation_bindings.first
         return unless binding.action == action
-
+      
         @navigation_bindings.shift
       end
-
+      
       def write(slice : Bytes) : Nil
         raise IO::Error.new("Keyboard input IO is read-only")
       end
-
+      
       def tty? : Bool
         {% if T.has_method?(:tty?) %}
           @source.tty?
@@ -447,7 +451,7 @@ def self.publish_command(
           false
         {% end %}
       end
-
+      
       def raw(& : self -> _)
         {% if T.has_method?(:raw) %}
           if @source.tty?
@@ -459,28 +463,28 @@ def self.publish_command(
           yield self
         {% end %}
       end
-
+      
       # Read until a complete input sequence or ordinary characters are available.
       # A trailing escape-sequence prefix is retained for the next OS read.
       private def refill : Nil
         loop do
           raw_size = @source.read(@source_buffer)
           raw_size.times { |index| @pending_source << @source_buffer[index] }
-
+      
           @source_offset = 0
           @eof = raw_size == 0
           @source_size = translate_navigation_sequences(@eof)
           break if @source_size > 0 || @eof
         end
       end
-
+      
       # Consume Alt scrolling locally in the input frontend, while translating the
       # existing Alt+K/J aliases into the Ctrl arrows understood by Reply 0.4.
       private def translate_navigation_sequences(eof : Bool) : Int32
         input_offset = 0
         output_size = 0
         limit = @pending_source.size
-
+      
         while input_offset < limit
           if sequence = input_scroll_sequence(input_offset, limit)
             binding, input_size = sequence
@@ -489,7 +493,7 @@ def self.publish_command(
           elsif sequence = alt_navigation_sequence(input_offset, limit)
             binding, input_size = sequence
             @navigation_bindings << binding
-
+      
             translated = binding.action == Action::SelectPrevious ? "\e[1;5A" : "\e[1;5B"
             output_size += append_sequence(translated, output_size)
             input_offset += input_size
@@ -506,11 +510,11 @@ def self.publish_command(
             input_offset += 1
           end
         end
-
+      
         @pending_source.shift(input_offset) if input_offset > 0
         output_size
       end
-
+      
       private def input_scroll_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
         TmuxREPL::Keyboard::INPUT_SCROLL_SEQUENCES.each do |sequence, label|
           if matches?(@pending_source, offset, limit, sequence)
@@ -521,7 +525,7 @@ def self.publish_command(
           end
         end
       end
-
+      
       private def alt_navigation_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
         if matches?(@pending_source, offset, limit, "\ek")
           {TmuxREPL::Keyboard.sequence_binding_for("Alt+K").not_nil!, 2}
@@ -533,7 +537,7 @@ def self.publish_command(
           {TmuxREPL::Keyboard.sequence_binding_for("Alt+J").not_nil!, 8}
         end
       end
-
+      
       private def control_navigation_binding(offset : Int32, limit : Int32) : SequenceBinding?
         if matches?(@pending_source, offset, limit, "\e[1;5A")
           TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Up")
@@ -541,7 +545,7 @@ def self.publish_command(
           TmuxREPL::Keyboard.sequence_binding_for("Ctrl+Down")
         end
       end
-
+      
       private def incomplete_sequence_prefix?(offset : Int32, limit : Int32) : Bool
         suffix = String.build do |io|
           index = offset
@@ -550,16 +554,16 @@ def self.publish_command(
             index += 1
           end
         end
-
+      
         TmuxREPL::Keyboard::INPUT_SEQUENCE_STRINGS.any? { |sequence| sequence.starts_with?(suffix) }
       end
-
+      
       private def append_sequence(sequence : String, offset : Int32) : Int32
         bytes = sequence.to_slice
         @read_buffer[offset, bytes.size].copy_from(bytes)
         bytes.size
       end
-
+      
       private def matches?(
         buffer : Array(UInt8),
         offset : Int32,
@@ -568,13 +572,13 @@ def self.publish_command(
       ) : Bool
         bytes = sequence.to_slice
         return false if offset + bytes.size > limit
-
+      
         bytes.size.times do |index|
           return false unless buffer[offset + index] == bytes[index]
         end
         true
       end
-
+      
       private def matches?(
         buffer : Bytes,
         offset : Int32,
@@ -583,23 +587,23 @@ def self.publish_command(
       ) : Bool
         bytes = sequence.to_slice
         return false if offset + bytes.size > limit
-
+      
         bytes.size.times do |index|
           return false unless buffer[offset + index] == bytes[index]
         end
         true
       end
-
+      
       # Keep Enter and each Ctrl navigation sequence in a separate read so Reply can
       # parse them even when ordinary text or another key arrived in the same OS read.
       private def bytes_before_line_ending(available : Int32) : Int32
         available.times do |index|
           offset = @source_offset + index
           byte = @read_buffer[offset]
-
+      
           return index == 0 ? 1 : index if byte == '\r'.ord
           return index == 0 ? 1 : index if byte == '\n'.ord && index == available - 1
-
+      
           if byte == '\e'.ord
             if sequence_size = navigation_sequence_size(offset, @source_size)
               return index == 0 ? sequence_size : index
@@ -608,11 +612,11 @@ def self.publish_command(
         end
         available
       end
-
+      
       private def navigation_sequence_size(offset : Int32, limit : Int32) : Int32?
         sequence = "\e[1;5A"
         return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
-
+      
         sequence = "\e[1;5B"
         return sequence.bytesize if matches?(@read_buffer, offset, limit, sequence)
       end
@@ -721,7 +725,7 @@ def self.publish_command(
       @started = false
       @stopped = false
       @joined = false
-
+      
       def initialize(
         @session_name : String,
         @pane : String,
@@ -733,17 +737,17 @@ def self.publish_command(
         @finished = Channel(Nil).new(1)
         @trace = Trace.new(@session_name, @pane)
       end
-
+      
       def start : Nil
         @state_mutex.synchronize do
           raise "Keyboard dispatcher has already been started or stopped" if @started || @stopped
           @started = true
         end
-
+      
         spawn { consume }
         nil
       end
-
+      
       # Queue every character before Reply edits it or Output reads the next one.
       def enqueue(character : Char) : Action?
         action = Keyboard.action_for(character)
@@ -751,14 +755,14 @@ def self.publish_command(
           action = Action::SubmitInput
         end
         press = KeyPress.new(character, action)
-
+      
         @state_mutex.synchronize do
           @queue.push(press) unless @stopped
         end
-
+      
         action
       end
-
+      
       # Queue a parsed key sequence after its handler has decided what to do with it.
       def enqueue(binding : SequenceBinding) : Action
         press = KeyPress.new(binding.label, binding.action)
@@ -767,7 +771,7 @@ def self.publish_command(
         end
         binding.action
       end
-
+      
       # Close the queue and wait for the consumer to drain all pending characters.
       def stop : Nil
         should_wait = @state_mutex.synchronize do
@@ -775,15 +779,15 @@ def self.publish_command(
             @stopped = true
             @queue.close
           end
-
+      
           wait = @started && !@joined
           @joined = true if wait
           wait
         end
-
+      
         @finished.receive if should_wait
       end
-
+      
       private def consume : Nil
         loop do
           dispatch(@queue.pop)
@@ -800,11 +804,11 @@ def self.publish_command(
         @trace.close
         @finished.send(nil)
       end
-
+      
       private def dispatch(press : KeyPress) : Nil
         action = press.action
         action_name = action ? action.to_s : (@pane == "input" ? "reply_input" : "none")
-
+      
         result = case action
                  when Action::ToggleOutputView
                    begin
@@ -836,7 +840,7 @@ def self.publish_command(
                  else
                    @pane == "input" ? "handled_by_reply" : "ignored"
                  end
-
+      
         @trace.record(press, action_name, result)
       end
     end

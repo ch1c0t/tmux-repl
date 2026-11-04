@@ -310,7 +310,7 @@ module Output
       def update(event : JSON::Any) : Nil
         @mutex.synchronize do
           sequence = event["sequence"].as_i64.to_u64
-
+      
           case event["type"].as_s
           when "input"
             @scroll_offset = 0 if @selected_sequence != sequence
@@ -373,12 +373,12 @@ module Output
     def scroll(action : TmuxREPL::Keyboard::Action) : Bool
       @mutex.synchronize { scroll_locked(action) }
     end
-
+    
     private def scroll_locked(action : TmuxREPL::Keyboard::Action) : Bool
       previous_offset = @scroll_offset
       page_step = @body_height - 1
       page_step = 1 if page_step < 1
-
+    
       case action
       when TmuxREPL::Keyboard::Action::ScrollUp
         @scroll_offset += 1
@@ -389,15 +389,15 @@ module Output
       when TmuxREPL::Keyboard::Action::ScrollPageDown
         @scroll_offset -= page_step
       end
-
+    
       max_offset = @scrollable_lines - @body_height
       max_offset = 0 if max_offset < 0
       @scroll_offset = 0 if @scroll_offset < 0
       @scroll_offset = max_offset if @scroll_offset > max_offset
-
+    
       @scroll_offset != previous_offset
     end
-
+    
     private def scroll_action(name : String) : TmuxREPL::Keyboard::Action?
       case name
       when "ScrollUp"       then TmuxREPL::Keyboard::Action::ScrollUp
@@ -406,7 +406,7 @@ module Output
       when "ScrollPageDown" then TmuxREPL::Keyboard::Action::ScrollPageDown
       end
     end
-
+    
     private def output_lines(text : String) : Array(String)
       normalized = text.gsub("\r\n", "\n").gsub("\r", "\n")
       return [] of String if normalized.empty?
