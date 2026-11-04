@@ -76,6 +76,38 @@ describe TmuxREPL::Keyboard::InputIO do
     String.new(buffer[0, size]).should eq("beforeafter")
   end
 
+  it "consumes Ctrl+W instead of passing it to Reply" do
+    input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("before\u0017after"))
+    buffer = Bytes.new(1024)
+
+    size = input.read(buffer)
+    String.new(buffer[0, size]).should eq("beforeafter")
+  end
+
+  it "consumes Alt horizontal navigation sequences in the input pane" do
+    source = "before\e[1;3Dleft\e[1;3Cright\e[1;3Hstart\e[1;3Fend"
+    input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new(source))
+    buffer = Bytes.new(1024)
+
+    size = input.read(buffer)
+    String.new(buffer[0, size]).should eq("beforeleftrightstartend")
+  end
+
+  it "recognizes Alt horizontal navigation sequences split across reads" do
+    source = ChunkedInputIO.new(["before\e[1;", "3Dmiddle\e[1;", "3Cafter"])
+    input = TmuxREPL::Keyboard::InputIO.new(source)
+    buffer = Bytes.new(1024)
+
+    first_size = input.read(buffer)
+    String.new(buffer[0, first_size]).should eq("before")
+
+    second_size = input.read(buffer)
+    String.new(buffer[0, second_size]).should eq("middle")
+
+    third_size = input.read(buffer)
+    String.new(buffer[0, third_size]).should eq("after")
+  end
+
   it "consumes Alt scrolling sequences rather than passing them to Reply" do
     source = "before\e[1;3Aafter\e[1;3Bpage-up\e[5;3~page-down\e[6;3~tail"
     input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new(source))

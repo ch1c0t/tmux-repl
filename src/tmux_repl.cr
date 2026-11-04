@@ -265,6 +265,7 @@ module TmuxREPL
     enum Action
       ToggleOutputView
       ToggleOutputList
+      ToggleOutputWrap
       SelectPrevious
       SelectNext
       SubmitInput
@@ -319,6 +320,12 @@ module TmuxREPL
         "Ctrl+L",
         "Toggle the available-outputs list from either pane."
       ),
+      Binding.new(
+        '\u0017',
+        Action::ToggleOutputWrap,
+        "Ctrl+W",
+        "Toggle wrapped/unwrapped output from either pane."
+      ),
     ]
     
     # Ctrl+Up/Down are the primary input-selection bindings. Alt+K/J are aliases.
@@ -331,6 +338,10 @@ module TmuxREPL
       SequenceBinding.new("Alt+Down", Action::ScrollDown, "Alt+Down", "Scroll output down one line from either pane."),
       SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page from either pane."),
       SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page from either pane."),
+      SequenceBinding.new("Alt+Left", Action::ScrollHorizontalLeft, "Alt+Left", "Scroll an unwrapped line left."),
+      SequenceBinding.new("Alt+Right", Action::ScrollHorizontalRight, "Alt+Right", "Scroll an unwrapped line right."),
+      SequenceBinding.new("Alt+Home", Action::ScrollHorizontalStart, "Alt+Home", "Jump to the start of an unwrapped line."),
+      SequenceBinding.new("Alt+End", Action::ScrollHorizontalEnd, "Alt+End", "Jump to the end of an unwrapped line."),
     ]
     
     # xterm modifier parameter 3 represents Alt combined with the key.
@@ -339,17 +350,27 @@ module TmuxREPL
       "\e[1;3B" => "Alt+Down",
       "\e[5;3~" => "Alt+PageUp",
       "\e[6;3~" => "Alt+PageDown",
+      "\e[1;3D" => "Alt+Left",
+      "\e[1;3C" => "Alt+Right",
+      "\e[1;3H" => "Alt+Home",
+      "\e[1;3F" => "Alt+End",
       "\e\e[A"  => "Alt+Up",
       "\e\e[B"  => "Alt+Down",
       "\e\e[5~" => "Alt+PageUp",
       "\e\e[6~" => "Alt+PageDown",
+      "\e\e[D"  => "Alt+Left",
+      "\e\e[C"  => "Alt+Right",
+      "\e\e[H"  => "Alt+Home",
+      "\e\e[F"  => "Alt+End",
     }
     
     INPUT_SEQUENCE_STRINGS = [
       "\ek", "\ej", "\e[107;3u", "\e[106;3u",
       "\e[1;5A", "\e[1;5B",
       "\e[1;3A", "\e[1;3B", "\e[5;3~", "\e[6;3~",
+      "\e[1;3D", "\e[1;3C", "\e[1;3H", "\e[1;3F",
       "\e\e[A", "\e\e[B", "\e\e[5~", "\e\e[6~",
+      "\e\e[D", "\e\e[C", "\e\e[H", "\e\e[F",
     ]
     
     # Unmodified keys and their Alt-modified equivalents are accepted in Output.
@@ -358,14 +379,26 @@ module TmuxREPL
       "\e[B"    => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
       "\e[5~"   => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
       "\e[6~"   => SequenceBinding.new("PageDown", Action::ScrollPageDown, "PageDown", "Scroll output down one page."),
+      "\e[D"    => SequenceBinding.new("Left", Action::ScrollHorizontalLeft, "Left", "Scroll an unwrapped output line left."),
+      "\e[C"    => SequenceBinding.new("Right", Action::ScrollHorizontalRight, "Right", "Scroll an unwrapped output line right."),
+      "\e[H"    => SequenceBinding.new("Home", Action::ScrollHorizontalStart, "Home", "Jump to the start of an unwrapped line."),
+      "\e[F"    => SequenceBinding.new("End", Action::ScrollHorizontalEnd, "End", "Jump to the end of an unwrapped line."),
       "\e[1;3A" => SequenceBinding.new("Alt+Up", Action::ScrollUp, "Alt+Up", "Scroll output up one line."),
       "\e[1;3B" => SequenceBinding.new("Alt+Down", Action::ScrollDown, "Alt+Down", "Scroll output down one line."),
       "\e[5;3~" => SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page."),
       "\e[6;3~" => SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page."),
+      "\e[1;3D" => SequenceBinding.new("Alt+Left", Action::ScrollHorizontalLeft, "Alt+Left", "Scroll an unwrapped output line left."),
+      "\e[1;3C" => SequenceBinding.new("Alt+Right", Action::ScrollHorizontalRight, "Alt+Right", "Scroll an unwrapped output line right."),
+      "\e[1;3H" => SequenceBinding.new("Alt+Home", Action::ScrollHorizontalStart, "Alt+Home", "Jump to the start of an unwrapped line."),
+      "\e[1;3F" => SequenceBinding.new("Alt+End", Action::ScrollHorizontalEnd, "Alt+End", "Jump to the end of an unwrapped line."),
       "\e\e[A"  => SequenceBinding.new("Alt+Up", Action::ScrollUp, "Alt+Up", "Scroll output up one line."),
       "\e\e[B"  => SequenceBinding.new("Alt+Down", Action::ScrollDown, "Alt+Down", "Scroll output down one line."),
       "\e\e[5~" => SequenceBinding.new("Alt+PageUp", Action::ScrollPageUp, "Alt+PageUp", "Scroll output up one page."),
       "\e\e[6~" => SequenceBinding.new("Alt+PageDown", Action::ScrollPageDown, "Alt+PageDown", "Scroll output down one page."),
+      "\e\e[D"  => SequenceBinding.new("Alt+Left", Action::ScrollHorizontalLeft, "Alt+Left", "Scroll an unwrapped output line left."),
+      "\e\e[C"  => SequenceBinding.new("Alt+Right", Action::ScrollHorizontalRight, "Alt+Right", "Scroll an unwrapped output line right."),
+      "\e\e[H"  => SequenceBinding.new("Alt+Home", Action::ScrollHorizontalStart, "Alt+Home", "Jump to the start of an unwrapped line."),
+      "\e\e[F"  => SequenceBinding.new("Alt+End", Action::ScrollHorizontalEnd, "Alt+End", "Jump to the end of an unwrapped line."),
     }
     
     def self.binding_for(key : Char) : Binding?
@@ -407,12 +440,19 @@ module TmuxREPL
     end
     
     def self.help_text : String
-      toggle_help = "Ctrl+G: raw/stripped · Ctrl+L: list"
+      toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap"
+      horizontal_help = "Alt+←/→ scroll · Alt+Home/End jump"
       bindings = BINDINGS.reject do |binding|
-        binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList
+        binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList || binding.action == Action::ToggleOutputWrap
+      end
+      horizontal_bindings = SEQUENCE_BINDINGS.reject do |binding|
+        binding.action == Action::ScrollHorizontalLeft ||
+          binding.action == Action::ScrollHorizontalRight ||
+          binding.action == Action::ScrollHorizontalStart ||
+          binding.action == Action::ScrollHorizontalEnd
       end
     
-      ([toggle_help] + bindings.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
+      ([toggle_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
     end
   
     class InputIO(T) < IO
@@ -507,6 +547,9 @@ module TmuxREPL
         while input_offset < limit
           if matches?(@pending_source, input_offset, limit, "\f")
             @keyboard.try &.enqueue('\u000c')
+            input_offset += 1
+          elsif matches?(@pending_source, input_offset, limit, "\u0017")
+            @keyboard.try &.enqueue('\u0017')
             input_offset += 1
           elsif sequence = input_scroll_sequence(input_offset, limit)
             binding, input_size = sequence
@@ -848,9 +891,19 @@ module TmuxREPL
                      STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                      "publish_failed"
                    end
+                 when Action::ToggleOutputWrap
+                   begin
+                     TmuxREPL.publish_event(@events, "toggle_wrap", @session_name, 0_u64)
+                     "published"
+                   rescue ex
+                     STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
+                     "publish_failed"
+                   end
                  when Action::SelectPrevious, Action::SelectNext
                    "handled_by_input_reader"
-                 when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown
+                 when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown,
+                      Action::ScrollHorizontalLeft, Action::ScrollHorizontalRight,
+                      Action::ScrollHorizontalStart, Action::ScrollHorizontalEnd
                    if @pane == "input"
                      begin
                        TmuxREPL.publish_event(

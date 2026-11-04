@@ -176,10 +176,17 @@ def self.label_for(action : Action) : String
 end
 
 def self.help_text : String
-  toggle_help = "Ctrl+G raw/stripped · Ctrl+L list · Ctrl+W wrap"
+  toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap"
+  horizontal_help = "Alt+←/→ scroll · Alt+Home/End jump"
   bindings = BINDINGS.reject do |binding|
     binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList || binding.action == Action::ToggleOutputWrap
   end
+  horizontal_bindings = SEQUENCE_BINDINGS.reject do |binding|
+    binding.action == Action::ScrollHorizontalLeft ||
+      binding.action == Action::ScrollHorizontalRight ||
+      binding.action == Action::ScrollHorizontalStart ||
+      binding.action == Action::ScrollHorizontalEnd
+  end
 
-  ([toggle_help] + bindings.map(&.help_line) + SEQUENCE_BINDINGS.map(&.help_line)).join("\n")
+  ([toggle_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
 end
