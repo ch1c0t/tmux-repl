@@ -87,35 +87,39 @@ class SmokeTest
 
     private def step(name : String, &block : -> Nil) : Nil
       started_at = Time.instant
-      @stage = name
-      yield
-      elapsed = (Time.instant - started_at).total_milliseconds
-      @report << {name: name, passed: true, duration_ms: elapsed, details: ""}
-      sleep @step_delay if @step_delay.total_nanoseconds > 0
-    rescue ex
-      elapsed = (Time.instant - started_at).total_milliseconds
-      @report << {name: name, passed: false, duration_ms: elapsed, details: "#{ex.class}: #{ex.message}"}
-      raise ex
+      begin
+        @stage = name
+        yield
+        elapsed = (Time.instant - started_at).total_milliseconds
+        @report << {name: name, passed: true, duration_ms: elapsed, details: ""}
+        sleep @step_delay if @step_delay.total_nanoseconds > 0
+      rescue ex
+        elapsed = (Time.instant - started_at).total_milliseconds
+        @report << {name: name, passed: false, duration_ms: elapsed, details: "#{ex.class}: #{ex.message}"}
+        raise ex
+      end
     end
 
     private def return_to_origin : Nil
       started_at = Time.instant
-      @origin_session.switch_client
-      elapsed = (Time.instant - started_at).total_milliseconds
-      @report << {
-        name: "Return to original session",
-        passed: true,
-        duration_ms: elapsed,
-        details: @origin_session_name,
-      }
-    rescue ex
-      elapsed = (Time.instant - started_at).total_milliseconds
-      @report << {
-        name: "Return to original session",
-        passed: false,
-        duration_ms: elapsed,
-        details: "#{ex.class}: #{ex.message}",
-      }
+      begin
+        @origin_session.switch_client
+        elapsed = (Time.instant - started_at).total_milliseconds
+        @report << {
+          name: "Return to original session",
+          passed: true,
+          duration_ms: elapsed,
+          details: @origin_session_name,
+        }
+      rescue ex
+        elapsed = (Time.instant - started_at).total_milliseconds
+        @report << {
+          name: "Return to original session",
+          passed: false,
+          duration_ms: elapsed,
+          details: "#{ex.class}: #{ex.message}",
+        }
+      end
     end
 
     private def repl_session_name : String
