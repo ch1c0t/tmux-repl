@@ -15,6 +15,16 @@ describe TmuxREPL::Keyboard do
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+W")
   end
 
+  it "maps Alt+Z to the shared Output-pane zoom toggle" do
+    action = TmuxREPL::Keyboard::Action::ToggleOutputZoom
+    binding = TmuxREPL::Keyboard.sequence_binding_for("Alt+Z").not_nil!
+
+    binding.action.should eq(action)
+    TmuxREPL::Keyboard.label_for(action).should eq("Alt+Z")
+    TmuxREPL::Keyboard.output_sequence_binding_for("\ez").not_nil!.action.should eq(action)
+    TmuxREPL::Keyboard.output_sequence_binding_for("\e[122;3u").not_nil!.action.should eq(action)
+  end
+
   it "maps Ctrl+L to the available-outputs list toggle" do
     action = TmuxREPL::Keyboard::Action::ToggleOutputList
 
@@ -59,6 +69,8 @@ describe TmuxREPL::Keyboard do
 
   it "maps plain and Alt-modified output sequences to scroll actions" do
     {
+      "\ez"       => TmuxREPL::Keyboard::Action::ToggleOutputZoom,
+      "\e[122;3u" => TmuxREPL::Keyboard::Action::ToggleOutputZoom,
       "\e[A"    => TmuxREPL::Keyboard::Action::ScrollUp,
       "\e[B"    => TmuxREPL::Keyboard::Action::ScrollDown,
       "\e[5~"   => TmuxREPL::Keyboard::Action::ScrollPageUp,
@@ -99,6 +111,7 @@ describe TmuxREPL::Keyboard do
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+G")
     TmuxREPL::Keyboard.help_text.should eq(
       "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap\n" \
+      "Alt+Z zoom or restore Output from either pane\n" \
       "Alt+←/→ scroll · Alt+Home/End jump\n" \
       "Ctrl+Up         Select the previous input.\n" \
       "Ctrl+Down       Select the next input.\n" \

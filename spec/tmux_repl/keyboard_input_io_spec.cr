@@ -68,6 +68,21 @@ describe TmuxREPL::Keyboard::InputIO do
     next_input.take_navigation_binding(TmuxREPL::Keyboard::Action::SelectNext).not_nil!.label.should eq("Alt+J")
   end
 
+  it "consumes Alt+Z zoom toggles from the input pane, including split reads" do
+    source = ChunkedInputIO.new(["before\e", "zafter\e[122;", "3utail"])
+    input = TmuxREPL::Keyboard::InputIO.new(source)
+    buffer = Bytes.new(1024)
+
+    first_size = input.read(buffer)
+    String.new(buffer[0, first_size]).should eq("before")
+
+    second_size = input.read(buffer)
+    String.new(buffer[0, second_size]).should eq("after")
+
+    third_size = input.read(buffer)
+    String.new(buffer[0, third_size]).should eq("tail")
+  end
+
   it "consumes Ctrl+L instead of passing it to Reply" do
     input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("before\fafter"))
     buffer = Bytes.new(1024)

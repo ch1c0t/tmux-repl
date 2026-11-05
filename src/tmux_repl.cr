@@ -266,6 +266,7 @@ module TmuxREPL
       ToggleOutputView
       ToggleOutputList
       ToggleOutputWrap
+      ToggleOutputZoom
       SelectPrevious
       SelectNext
       SubmitInput
@@ -342,10 +343,13 @@ module TmuxREPL
       SequenceBinding.new("Alt+Right", Action::ScrollHorizontalRight, "Alt+Right", "Scroll an unwrapped line right."),
       SequenceBinding.new("Alt+Home", Action::ScrollHorizontalStart, "Alt+Home", "Jump to the start of an unwrapped line."),
       SequenceBinding.new("Alt+End", Action::ScrollHorizontalEnd, "Alt+End", "Jump to the end of an unwrapped line."),
+      SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane from either pane."),
     ]
     
     # xterm modifier parameter 3 represents Alt combined with the key.
-    INPUT_SCROLL_SEQUENCES = {
+    INPUT_ACTION_SEQUENCES = {
+      "\ez"       => "Alt+Z",
+      "\e[122;3u" => "Alt+Z",
       "\e[1;3A" => "Alt+Up",
       "\e[1;3B" => "Alt+Down",
       "\e[5;3~" => "Alt+PageUp",
@@ -365,6 +369,7 @@ module TmuxREPL
     }
     
     INPUT_SEQUENCE_STRINGS = [
+      "\ez", "\e[122;3u",
       "\ek", "\ej", "\e[107;3u", "\e[106;3u",
       "\e[1;5A", "\e[1;5B",
       "\e[1;3A", "\e[1;3B", "\e[5;3~", "\e[6;3~",
@@ -375,7 +380,9 @@ module TmuxREPL
     
     # Unmodified keys and their Alt-modified equivalents are accepted in Output.
     OUTPUT_SEQUENCE_BINDINGS = {
-      "\e[A"    => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
+      "\ez"       => SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane."),
+      "\e[122;3u" => SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane."),
+      "\e[A    => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
       "\e[B"    => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
       "\e[5~"   => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
       "\e[6~"   => SequenceBinding.new("PageDown", Action::ScrollPageDown, "PageDown", "Scroll output down one page."),
@@ -441,6 +448,7 @@ module TmuxREPL
     
     def self.help_text : String
       toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap"
+      zoom_help = "Alt+Z zoom or restore Output from either pane"
       horizontal_help = "Alt+←/→ scroll · Alt+Home/End jump"
       bindings = BINDINGS.reject do |binding|
         binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList || binding.action == Action::ToggleOutputWrap
@@ -452,7 +460,7 @@ module TmuxREPL
           binding.action == Action::ScrollHorizontalEnd
       end
     
-      ([toggle_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
+      ([toggle_help, zoom_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
     end
   
     class InputIO(T) < IO
@@ -551,7 +559,7 @@ module TmuxREPL
           elsif matches?(@pending_source, input_offset, limit, "\u0017")
             @keyboard.try &.enqueue('\u0017')
             input_offset += 1
-          elsif sequence = input_scroll_sequence(input_offset, limit)
+          elsif sequence = input_binding_sequence(input_offset, limit)
             binding, input_size = sequence
             @keyboard.try &.enqueue(binding)
             input_offset += input_size
@@ -580,8 +588,8 @@ module TmuxREPL
         output_size
       end
       
-      private def input_scroll_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
-        TmuxREPL::Keyboard::INPUT_SCROLL_SEQUENCES.each do |sequence, label|
+      private def input_binding_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
+        TmuxREPL::Keyboard::INPUT_ACTION_SEQUENCES.each do |sequence, label|
           if matches?(@pending_source, offset, limit, sequence)
             return {
               TmuxREPL::Keyboard.sequence_binding_for(label).not_nil!,
@@ -894,6 +902,14 @@ module TmuxREPL
                  when Action::ToggleOutputWrap
                    begin
                      TmuxREPL.publish_event(@events, "toggle_wrap", @session_name, 0_u64)
+                     "published"
+                   rescue ex
+                     STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
+                     "publish_failed"
+                   end
+                 when Action::ToggleOutputZoom
+                   begin
+                     TmuxREPL.publish_event(@events, "toggle_output_zoom", @session_name, 0_u64)
                      "published"
                    rescue ex
                      STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"

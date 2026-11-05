@@ -93,7 +93,7 @@ private def translate_navigation_sequences(eof : Bool) : Int32
     elsif matches?(@pending_source, input_offset, limit, "\u0017")
       @keyboard.try &.enqueue('\u0017')
       input_offset += 1
-    elsif sequence = input_scroll_sequence(input_offset, limit)
+    elsif sequence = input_binding_sequence(input_offset, limit)
       binding, input_size = sequence
       @keyboard.try &.enqueue(binding)
       input_offset += input_size
@@ -122,8 +122,8 @@ private def translate_navigation_sequences(eof : Bool) : Int32
   output_size
 end
 
-private def input_scroll_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
-  TmuxREPL::Keyboard::INPUT_SCROLL_SEQUENCES.each do |sequence, label|
+private def input_binding_sequence(offset : Int32, limit : Int32) : Tuple(SequenceBinding, Int32)?
+  TmuxREPL::Keyboard::INPUT_ACTION_SEQUENCES.each do |sequence, label|
     if matches?(@pending_source, offset, limit, sequence)
       return {
         TmuxREPL::Keyboard.sequence_binding_for(label).not_nil!,

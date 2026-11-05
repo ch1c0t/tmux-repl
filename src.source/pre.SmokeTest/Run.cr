@@ -84,6 +84,22 @@ def run : Nil
       4.times { input_pane.send_keys("M-PageDown", enter: false) }
       expect_output("SMOKE_SCROLL_LINE_60")
     end
+    step("Alt+Z from Input zooms Output") do
+      input_pane.send_keys("M-z", enter: false)
+      expect_output_zoomed(true)
+    end
+    step("Alt+Z from Output restores the split") do
+      output_pane.send_keys("M-z", enter: false)
+      expect_output_zoomed(false)
+    end
+    step("Alt+Z from Output zooms Output") do
+      output_pane.send_keys("M-z", enter: false)
+      expect_output_zoomed(true)
+    end
+    step("Alt+Z from Input restores the split") do
+      input_pane.send_keys("M-z", enter: false)
+      expect_output_zoomed(false)
+    end
     step("Leave the smoke-test session running") do
       unless @server.cmd("has-session", "-t", repl_session_name).success?
         raise "The smoke-test Tmux session disappeared."
@@ -100,6 +116,7 @@ def run : Nil
       }
     end
   ensure
+    restore_output_zoom
     return_to_origin
   end
 

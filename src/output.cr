@@ -17,15 +17,19 @@ module Output
           event_type = data["type"].as_s
           event_received_at = Time.instant if TmuxREPL.trace_timing_enabled?
       
-          view.update(data)
+          if event_type == "toggle_output_zoom"
+            toggle_output_zoom(view)
+          else
+            view.update(data)
       
-          render_started_at = Time.instant if TmuxREPL.trace_timing_enabled?
-          view.render
-          if render_started = render_started_at
-            TmuxREPL.trace_timing(
-              @session_name, "output", "event_rendered", render_started,
-              "type=#{event_type} sequence=#{sequence}"
-            )
+            render_started_at = Time.instant if TmuxREPL.trace_timing_enabled?
+            view.render
+            if render_started = render_started_at
+              TmuxREPL.trace_timing(
+                @session_name, "output", "event_rendered", render_started,
+                "type=#{event_type} sequence=#{sequence}"
+              )
+            end
           end
           if event_started = event_received_at
             TmuxREPL.trace_timing(
@@ -41,6 +45,13 @@ module Output
           rescue
           end
         end
+      end
+      
+      private def toggle_output_zoom(view : View) : Nil
+        pane = Tmux::Pane.from_env
+        pane.select
+        pane.run!("resize-pane", "-Z", "-t", pane.pane_id)
+        view.render
       end
     end
   

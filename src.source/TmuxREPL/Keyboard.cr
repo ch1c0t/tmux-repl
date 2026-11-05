@@ -2,6 +2,7 @@ enum Action
   ToggleOutputView
   ToggleOutputList
   ToggleOutputWrap
+  ToggleOutputZoom
   SelectPrevious
   SelectNext
   SubmitInput
@@ -78,10 +79,13 @@ SEQUENCE_BINDINGS = [
   SequenceBinding.new("Alt+Right", Action::ScrollHorizontalRight, "Alt+Right", "Scroll an unwrapped line right."),
   SequenceBinding.new("Alt+Home", Action::ScrollHorizontalStart, "Alt+Home", "Jump to the start of an unwrapped line."),
   SequenceBinding.new("Alt+End", Action::ScrollHorizontalEnd, "Alt+End", "Jump to the end of an unwrapped line."),
+  SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane from either pane."),
 ]
 
 # xterm modifier parameter 3 represents Alt combined with the key.
-INPUT_SCROLL_SEQUENCES = {
+INPUT_ACTION_SEQUENCES = {
+  "\ez"       => "Alt+Z",
+  "\e[122;3u" => "Alt+Z",
   "\e[1;3A" => "Alt+Up",
   "\e[1;3B" => "Alt+Down",
   "\e[5;3~" => "Alt+PageUp",
@@ -101,6 +105,7 @@ INPUT_SCROLL_SEQUENCES = {
 }
 
 INPUT_SEQUENCE_STRINGS = [
+  "\ez", "\e[122;3u",
   "\ek", "\ej", "\e[107;3u", "\e[106;3u",
   "\e[1;5A", "\e[1;5B",
   "\e[1;3A", "\e[1;3B", "\e[5;3~", "\e[6;3~",
@@ -111,7 +116,9 @@ INPUT_SEQUENCE_STRINGS = [
 
 # Unmodified keys and their Alt-modified equivalents are accepted in Output.
 OUTPUT_SEQUENCE_BINDINGS = {
-  "\e[A"    => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
+  "\ez"       => SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane."),
+  "\e[122;3u" => SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane."),
+  "\e[A    => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
   "\e[B"    => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
   "\e[5~"   => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
   "\e[6~"   => SequenceBinding.new("PageDown", Action::ScrollPageDown, "PageDown", "Scroll output down one page."),
@@ -177,6 +184,7 @@ end
 
 def self.help_text : String
   toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap"
+  zoom_help = "Alt+Z zoom or restore Output from either pane"
   horizontal_help = "Alt+←/→ scroll · Alt+Home/End jump"
   bindings = BINDINGS.reject do |binding|
     binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList || binding.action == Action::ToggleOutputWrap
@@ -188,5 +196,5 @@ def self.help_text : String
       binding.action == Action::ScrollHorizontalEnd
   end
 
-  ([toggle_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
+  ([toggle_help, zoom_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
 end

@@ -64,6 +64,28 @@ private def expect_output_without(marker : String) : Nil
   raise "Output pane still contains #{marker.inspect}.\n#{text}" if text.includes?(marker)
 end
 
+private def expect_output_zoomed(expected : Bool) : Nil
+  found = wait_until do
+    zoomed = output_pane.display_message("\#{window_zoomed_flag}") == "1"
+    zoomed == expected && (!expected || output_pane.active?)
+  end
+  return if found
+
+  actual = output_pane.display_message("\#{window_zoomed_flag}") == "1"
+  raise "Expected Output pane zoomed=#{expected}, got #{actual}."
+end
+
+private def restore_output_zoom : Nil
+  pane = @output_pane
+  return unless pane
+  return unless pane.display_message("\#{window_zoomed_flag}") == "1"
+
+  pane.select
+  pane.run!("resize-pane", "-Z", "-t", pane.pane_id)
+rescue ex
+  STDERR.puts "tmux.repl.test: failed to restore Output zoom: #{ex.message}"
+end
+
 private def pane_text(pane : Tmux::Pane) : String
   pane.capture_pane(join_wrapped: true).join("\n")
 end

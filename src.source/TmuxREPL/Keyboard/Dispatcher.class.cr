@@ -115,6 +115,14 @@ private def dispatch(press : KeyPress) : Nil
                STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                "publish_failed"
              end
+           when Action::ToggleOutputZoom
+             begin
+               TmuxREPL.publish_event(@events, "toggle_output_zoom", @session_name, 0_u64)
+               "published"
+             rescue ex
+               STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
+               "publish_failed"
+             end
            when Action::SelectPrevious, Action::SelectNext
              "handled_by_input_reader"
            when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown,
