@@ -1,6 +1,3 @@
-require "file_utils"
-require "json"
-
 TIMEOUT = 8.seconds
 
 @server : Tmux::Server
