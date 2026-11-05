@@ -151,7 +151,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tmux-repl-smoke-test-report
-          path: \${{ runner.temp }}/tmux-repl-smoke-tests/*.json
+          path: ${{ runner.temp }}/tmux-repl-smoke-tests/*.json
           if-no-files-found: warn
           retention-days: 14
       - name: Show LavinMQ logs on failure
