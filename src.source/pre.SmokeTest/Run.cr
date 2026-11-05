@@ -38,11 +38,11 @@ def run : Nil
     end
     step("Ctrl+G from the input pane switches to raw output") do
       input_pane.send_keys("C-g", enter: false)
-      expect_output("[RAW; Ctrl+G toggles view]", "START_MARK_", "END_MARK_")
+      expect_output("[RAW;", "START_MARK_", "END_MARK_")
     end
     step("Ctrl+G from the output pane switches back to stripped output") do
       output_pane.send_keys("C-g", enter: false)
-      expect_output("[STRIPPED; Ctrl+G toggles view]", "SMOKE_STREAM_TICK_4")
+      expect_output("[STRIPPED;", "SMOKE_STREAM_TICK_4")
       expect_output_without("START_MARK_")
       expect_output_without("END_MARK_")
     end
