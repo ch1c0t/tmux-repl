@@ -183,8 +183,7 @@ def self.label_for(action : Action) : String
 end
 
 def self.help_text : String
-  toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap"
-  zoom_help = "Alt+Z zoom or restore Output from either pane"
+  toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap · Alt+Z zoom Output"
   horizontal_help = "Alt+←/→ scroll · Alt+Home/End jump"
   bindings = BINDINGS.reject do |binding|
     binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList || binding.action == Action::ToggleOutputWrap
@@ -193,8 +192,9 @@ def self.help_text : String
     binding.action == Action::ScrollHorizontalLeft ||
       binding.action == Action::ScrollHorizontalRight ||
       binding.action == Action::ScrollHorizontalStart ||
-      binding.action == Action::ScrollHorizontalEnd
+      binding.action == Action::ScrollHorizontalEnd ||
+      binding.action == Action::ToggleOutputZoom
   end
 
-  ([toggle_help, zoom_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
+  ([toggle_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
 end

@@ -110,8 +110,7 @@ describe TmuxREPL::Keyboard do
 
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+G")
     TmuxREPL::Keyboard.help_text.should eq(
-      "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap\n" \
-      "Alt+Z zoom or restore Output from either pane\n" \
+      "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap · Alt+Z zoom Output\n" \
       "Alt+←/→ scroll · Alt+Home/End jump\n" \
       "Ctrl+Up         Select the previous input.\n" \
       "Ctrl+Down       Select the next input.\n" \

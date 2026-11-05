@@ -33,7 +33,7 @@ module LavinMQProcess
       input_pane.send_keys(":help", literal: true)
       expect_input(
         ":select ID", ":prev", ":next", ":list",
-        "Ctrl+G", "Ctrl+Up", "Ctrl+Down", "Alt+K", "Alt+J"
+        "Ctrl+G", "Ctrl+Up", "Ctrl+Down", "Alt+K", "Alt+J", "Alt+Z"
       )
 
       input_pane.send_keys(":select 1", literal: true)
