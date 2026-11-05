@@ -86,8 +86,8 @@ class SmokeTest
     end
 
     private def step(name : String, &block : -> Nil) : Nil
-      @stage = name
       started_at = Time.instant
+      @stage = name
       yield
       elapsed = (Time.instant - started_at).total_milliseconds
       @report << {name: name, passed: true, duration_ms: elapsed, details: ""}
