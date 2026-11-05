@@ -68,6 +68,7 @@ jobs:
       - name: Run tmux.repl smoke test
         env:
           TMUX_REPL_TEST_DELAY: "0"
+          TERM: xterm-256color
         shell: bash
         run: |
           set -euo pipefail
