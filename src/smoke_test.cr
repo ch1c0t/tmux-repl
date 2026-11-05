@@ -5,7 +5,7 @@ class SmokeTest
       unless File::Info.executable?("./bin/tmux.repl")
         raise "Missing ./bin/tmux.repl. Build the executables first with shards build."
       end
-
+    
       stdout = IO::Memory.new
       stderr = IO::Memory.new
       status = Process.run(
@@ -18,7 +18,7 @@ class SmokeTest
       unless status.success?
         raise "./bin/tmux.repl start failed (#{status.exit_code}).\n#{stdout}\n#{stderr}"
       end
-
+    
       created : Tmux::Session? = nil
       found = wait_until do
         created = @server.sessions.find do |session|
@@ -28,26 +28,26 @@ class SmokeTest
         !created.nil?
       end
       raise "Could not find the session created by ./bin/tmux.repl start." unless found
-
+    
       @repl_session = created
       @repl_session_name = created.not_nil!.session_name
     end
-
+    
     private def attach_panes : Nil
       session = @repl_session || raise "The REPL session was not created."
       panes = session.active_window.panes
       raise "Expected two panes, found #{panes.size}." unless panes.size == 2
-
+    
       @input_pane = panes[0]
       @output_pane = panes[1]
       expect_output("No inputs yet.", timeout: 3.seconds)
     end
-
+    
     private def submit_command(sequence : Int32, command : String, expected_output : String) : Nil
       input_pane.send_keys(command, literal: true)
       expect_output("INPUT ##{sequence}", expected_output, "[exit status: 0]")
     end
-
+    
     private def expect_output(*expected : String, timeout : Time::Span = TIMEOUT) : Nil
       last_text = ""
       expected = expected.to_a
@@ -56,35 +56,35 @@ class SmokeTest
         expected.all? { |text| last_text.includes?(text) }
       end
       return if found
-
+    
       missing = expected.reject { |text| last_text.includes?(text) }
       raise "Timed out waiting for output pane to show #{missing.map(&.inspect).join(", ")}.\n#{last_text}"
     end
-
+    
     private def expect_output_without(marker : String) : Nil
       text = pane_text(output_pane)
       raise "Output pane still contains #{marker.inspect}.\n#{text}" if text.includes?(marker)
     end
-
+    
     private def pane_text(pane : Tmux::Pane) : String
       pane.capture_pane(join_wrapped: true).join("\n")
     end
-
+    
     private def wait_until(
       timeout : Time::Span = TIMEOUT,
       interval : Time::Span = 25.milliseconds,
       &condition : -> Bool
     ) : Bool
       deadline = Time.instant + timeout
-
+    
       while Time.instant < deadline
         return true if yield
         sleep interval
       end
-
+    
       yield
     end
-
+    
     private def step(name : String, &block : -> Nil) : Nil
       started_at = Time.instant
       begin
@@ -99,7 +99,7 @@ class SmokeTest
         raise ex
       end
     end
-
+    
     private def return_to_origin : Nil
       started_at = Time.instant
       begin
@@ -121,29 +121,29 @@ class SmokeTest
         }
       end
     end
-
+    
     private def repl_session_name : String
       @repl_session_name || "(not created)"
     end
-
+    
     private def input_pane : Tmux::Pane
       @input_pane || raise "Input pane is not available."
     end
-
+    
     private def output_pane : Tmux::Pane
       @output_pane || raise "Output pane is not available."
     end
-
+    
     private def write_machine_report : String
       passed = @report.all? { |check| check[:passed] }
       finished_at = Time.utc.to_unix_ms
       home = ENV["HOME"]? || raise "HOME is not set."
       directory = File.join(home, ".local", "state", "tmux-repl", "smoke-tests")
       FileUtils.mkdir_p(directory)
-
+    
       path = File.join(directory, "smoke-test-#{@started_at.to_unix_ms}.json")
       temporary_path = "#{path}.tmp"
-
+    
       contents = JSON.build(indent: "  ") do |json|
         json.object do
           json.field "schema_version", 1
@@ -168,12 +168,12 @@ class SmokeTest
           end
         end
       end
-
+    
       File.write(temporary_path, contents + "\n")
       File.rename(temporary_path, path)
       path
     end
-
+    
     private def print_report(machine_report_path : String) : Nil
       puts
       puts "tmux.repl smoke test"
@@ -181,7 +181,7 @@ class SmokeTest
       puts "Original session: #{@origin_session_name}"
       puts "Smoke-test session: #{repl_session_name}"
       puts
-
+    
       @report.each do |check|
         marker = check[:passed] ? "\e[32mPASS\e[0m" : "\e[31mFAIL\e[0m"
         duration = "#{check[:duration_ms].round(0)} ms"
@@ -189,7 +189,7 @@ class SmokeTest
         summary = details.empty? ? duration : "#{duration}; #{details}"
         puts "#{marker}  #{check[:name]} (#{summary})"
       end
-
+    
       puts
       if session = @repl_session_name
         puts "The smoke-test session was left open: #{session}"
@@ -306,7 +306,7 @@ class SmokeTest
       ensure
         return_to_origin
       end
-
+    
       report_path = write_machine_report
       print_report(report_path)
       exit 1 unless @report.all? { |check| check[:passed] }
@@ -314,7 +314,7 @@ class SmokeTest
   end
 
   TIMEOUT = 8.seconds
-
+  
   @server : Tmux::Server
   @origin_session : Tmux::Session
   @origin_session_name : String
@@ -331,22 +331,22 @@ class SmokeTest
     duration_ms: Float64,
     details: String
   )
-
+  
   def initialize
     unless ENV["TMUX"]? && ENV["TMUX_PANE"]?
       raise "Run ./bin/tmux.repl.test from inside the tmux session you want to return to."
     end
-
+  
     @server = Tmux::Server.from_env
     @origin_session = Tmux::Session.from_env
     @origin_session_name = @origin_session.session_name
     @started_at = Time.utc
-
+  
     delay = ENV["TMUX_REPL_TEST_DELAY"]?.try(&.to_f?) || 0.8
     delay = 0.0 if delay < 0
     @step_delay = delay.seconds
   end
-
+  
   include Private
   include Run
 end
