@@ -37,7 +37,10 @@ jobs:
           EOF
 
           docker rm --force lavinmq >/dev/null 2>&1 || true
-          docker run --detach --name lavinmq             --mount type=bind,source=/tmp/lavinmq,target=/tmp/lavinmq             --mount "type=bind,source=$RUNNER_TEMP/lavinmq.ini,target=/etc/lavinmq/lavinmq.ini,readonly"             cloudamqp/lavinmq:2.10.2
+          docker run --detach --name lavinmq \
+            --mount type=bind,source=/tmp/lavinmq,target=/tmp/lavinmq \
+            --mount "type=bind,source=$RUNNER_TEMP/lavinmq.ini,target=/etc/lavinmq/lavinmq.ini,readonly" \
+            cloudamqp/lavinmq:2.10.2
 
           for attempt in $(seq 1 60); do
             if [ -S "$LAVINMQ_AMQP_UNIXSOCKET" ]; then
@@ -62,6 +65,95 @@ jobs:
         run: shards build
       - name: Run Crystal specs
         run: crystal spec
+      - name: Run tmux.repl smoke test
+        env:
+          TMUX_REPL_TEST_DELAY: "0"
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          result_file="$RUNNER_TEMP/tmux-repl-smoke-test.exit"
+          terminal_log="$RUNNER_TEMP/tmux-repl-smoke-test.terminal"
+          rm -f "$result_file" "$terminal_log"
+
+          tmux new-session -d -s tmux-repl-ci
+          script -q -e -c "tmux attach-session -t tmux-repl-ci" "$terminal_log" &
+          client_pid=$!
+          trap 'tmux kill-server >/dev/null 2>&1 || true; wait "$client_pid" 2>/dev/null || true' EXIT
+
+          attached=0
+          for attempt in $(seq 1 50); do
+            if tmux list-clients -F '#{client_session}' | grep -Fxq tmux-repl-ci; then
+              attached=1
+              break
+            fi
+            sleep 0.2
+          done
+          if [ "$attached" -ne 1 ]; then
+            cat "$terminal_log" || true
+            echo "Could not attach a tmux client for the smoke test." >&2
+            exit 1
+          fi
+
+          command="cd '$GITHUB_WORKSPACE' && ./bin/tmux.repl.test; status=\$?; printf '%s\n' \"\$status\" > '$result_file'"
+          tmux send-keys -t tmux-repl-ci:0.0 "$command" Enter
+
+          completed=0
+          for attempt in $(seq 1 240); do
+            if [ -f "$result_file" ]; then
+              completed=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$completed" -ne 1 ]; then
+            tmux capture-pane -p -t tmux-repl-ci:0.0 || true
+            cat "$terminal_log" || true
+            echo "tmux.repl.test did not finish within four minutes." >&2
+            exit 1
+          fi
+
+          test_exit_code="$(cat "$result_file")"
+          if [[ ! "$test_exit_code" =~ ^[0-9]+$ ]]; then
+            echo "Invalid tmux.repl.test exit code: $test_exit_code" >&2
+            exit 1
+          fi
+
+          report_dir="$HOME/.local/state/tmux-repl/smoke-tests"
+          report_path="$(find "$report_dir" -maxdepth 1 -type f -name 'smoke-test-*.json' -print -quit)"
+          if [ -z "$report_path" ]; then
+            echo "tmux.repl.test did not produce its JSON report in $report_dir." >&2
+            exit 1
+          fi
+
+          ruby -rjson -e '
+            report = JSON.parse(File.read(ARGV.fetch(0)))
+            abort "Unsupported report schema." unless report.fetch("schema_version") == 1
+            abort "Smoke test report is not successful." unless report.fetch("status") == "passed"
+            abort "Smoke test report exit code is not zero." unless report.fetch("exit_code") == 0
+            checks = report.fetch("checks")
+            failed = checks.reject { |check| check.fetch("status") == "passed" }
+            abort "Failed checks: #{failed.map { |check| check.fetch("name") }.join(", ")}" unless failed.empty?
+            puts "Validated #{checks.length} smoke-test checks from #{ARGV.fetch(0)}."
+          ' "$report_path"
+
+          exit "$test_exit_code"
+      - name: Prepare smoke-test report artifact
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/tmux-repl-smoke-tests"
+          if [ -d "$HOME/.local/state/tmux-repl/smoke-tests" ]; then
+            cp -a "$HOME/.local/state/tmux-repl/smoke-tests/." "$RUNNER_TEMP/tmux-repl-smoke-tests/"
+          fi
+      - name: Upload tmux.repl smoke-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmux-repl-smoke-test-report
+          path: \${{ runner.temp }}/tmux-repl-smoke-tests/*.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: Show LavinMQ logs on failure
         if: failure()
         run: docker logs lavinmq

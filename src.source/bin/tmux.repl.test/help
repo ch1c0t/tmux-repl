@@ -6,7 +6,8 @@ Usage:
 Run this command from inside the tmux session to which the test should return.
 It runs ./bin/tmux.repl start, exercises command selection, RAW/STRIPPED and
 available-outputs toggles, and scrolling in both panes. The new session is shown
-while the checks run and is left open afterwards.
+while the checks run and is left open afterwards. A JSON report is also written
+to ~/.local/state/tmux-repl/smoke-tests/.
 
 Requires:
   ./bin/tmux.repl and its companion executables (build with shards build)

@@ -1,3 +1,6 @@
+require "file_utils"
+require "json"
+
 TIMEOUT = 8.seconds
 
 @server : Tmux::Server
@@ -8,8 +11,14 @@ TIMEOUT = 8.seconds
 @input_pane : Tmux::Pane?
 @output_pane : Tmux::Pane?
 @step_delay : Time::Span
+@started_at : Time
 @stage = "initialize"
-@report = [] of Tuple(String, Bool, String)
+@report = [] of NamedTuple(
+  name: String,
+  passed: Bool,
+  duration_ms: Float64,
+  details: String
+)
 
 def initialize
   unless ENV["TMUX"]? && ENV["TMUX_PANE"]?
@@ -19,6 +28,7 @@ def initialize
   @server = Tmux::Server.from_env
   @origin_session = Tmux::Session.from_env
   @origin_session_name = @origin_session.session_name
+  @started_at = Time.utc
 
   delay = ENV["TMUX_REPL_TEST_DELAY"]?.try(&.to_f?) || 0.8
   delay = 0.0 if delay < 0

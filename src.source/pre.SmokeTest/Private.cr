@@ -87,19 +87,33 @@ private def step(name : String, &block : -> Nil) : Nil
   @stage = name
   started_at = Time.instant
   yield
-  elapsed = (Time.instant - started_at).total_milliseconds.round(0)
-  @report << {name, true, "#{elapsed} ms"}
+  elapsed = (Time.instant - started_at).total_milliseconds
+  @report << {name: name, passed: true, duration_ms: elapsed, details: ""}
   sleep @step_delay if @step_delay.total_nanoseconds > 0
 rescue ex
-  @report << {name, false, "#{ex.class}: #{ex.message}"}
+  elapsed = (Time.instant - started_at).total_milliseconds
+  @report << {name: name, passed: false, duration_ms: elapsed, details: "#{ex.class}: #{ex.message}"}
   raise ex
 end
 
 private def return_to_origin : Nil
+  started_at = Time.instant
   @origin_session.switch_client
-  @report << {"Return to original session", true, @origin_session_name}
+  elapsed = (Time.instant - started_at).total_milliseconds
+  @report << {
+    name: "Return to original session",
+    passed: true,
+    duration_ms: elapsed,
+    details: @origin_session_name,
+  }
 rescue ex
-  @report << {"Return to original session", false, "#{ex.class}: #{ex.message}"}
+  elapsed = (Time.instant - started_at).total_milliseconds
+  @report << {
+    name: "Return to original session",
+    passed: false,
+    duration_ms: elapsed,
+    details: "#{ex.class}: #{ex.message}",
+  }
 end
 
 private def repl_session_name : String
@@ -114,7 +128,46 @@ private def output_pane : Tmux::Pane
   @output_pane || raise "Output pane is not available."
 end
 
-private def print_report : Nil
+private def write_machine_report : String
+  passed = @report.all? { |check| check[:passed] }
+  finished_at = Time.utc.to_unix_ms
+  directory = File.join(Dir.home, ".local", "state", "tmux-repl", "smoke-tests")
+  FileUtils.mkdir_p(directory)
+
+  path = File.join(directory, "smoke-test-#{@started_at.to_unix_ms}.json")
+  temporary_path = "#{path}.tmp"
+
+  contents = JSON.build(indent: "  ") do |json|
+    json.object do
+      json.field "schema_version", 1
+      json.field "test", "tmux.repl"
+      json.field "status", passed ? "passed" : "failed"
+      json.field "exit_code", passed ? 0 : 1
+      json.field "started_at_unix_ms", @started_at.to_unix_ms
+      json.field "finished_at_unix_ms", finished_at
+      json.field "original_session", @origin_session_name
+      json.field "smoke_test_session", @repl_session_name
+      json.field "checks" do
+        json.array do
+          @report.each do |check|
+            json.object do
+              json.field "name", check[:name]
+              json.field "status", check[:passed] ? "passed" : "failed"
+              json.field "duration_ms", check[:duration_ms]
+              json.field "details", check[:details]
+            end
+          end
+        end
+      end
+    end
+  end
+
+  File.write(temporary_path, contents + "\n")
+  File.rename(temporary_path, path)
+  path
+end
+
+private def print_report(machine_report_path : String) : Nil
   puts
   puts "tmux.repl smoke test"
   puts "=" * 72
@@ -122,9 +175,12 @@ private def print_report : Nil
   puts "Smoke-test session: #{repl_session_name}"
   puts
 
-  @report.each do |name, passed, details|
-    marker = passed ? "\e[32mPASS\e[0m" : "\e[31mFAIL\e[0m"
-    puts "#{marker}  #{name} (#{details})"
+  @report.each do |check|
+    marker = check[:passed] ? "\e[32mPASS\e[0m" : "\e[31mFAIL\e[0m"
+    duration = "#{check[:duration_ms].round(0)} ms"
+    details = check[:details]
+    summary = details.empty? ? duration : "#{duration}; #{details}"
+    puts "#{marker}  #{check[:name]} (#{summary})"
   end
 
   puts
@@ -134,5 +190,5 @@ private def print_report : Nil
   else
     puts "No smoke-test session was created."
   end
-  puts "The report is displayed in the original session."
+  puts "Machine-readable report: #{machine_report_path}"
 end

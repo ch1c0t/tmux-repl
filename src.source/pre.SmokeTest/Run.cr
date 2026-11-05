@@ -91,13 +91,19 @@ def run : Nil
     end
   rescue ex
     last = @report.last?
-    unless last && !last[1]
-      @report << {"Smoke test", false, "#{@stage}: #{ex.class}: #{ex.message}"}
+    unless last && !last[:passed]
+      @report << {
+        name: "Smoke test",
+        passed: false,
+        duration_ms: 0.0,
+        details: "#{@stage}: #{ex.class}: #{ex.message}",
+      }
     end
   ensure
     return_to_origin
   end
 
-  print_report
-  exit 1 unless @report.all? { |entry| entry[1] }
+  report_path = write_machine_report
+  print_report(report_path)
+  exit 1 unless @report.all? { |check| check[:passed] }
 end
