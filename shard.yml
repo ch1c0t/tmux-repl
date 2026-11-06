@@ -14,6 +14,10 @@ targets:
     main: src/bin/tmux.repl.test.cr
   tmux.repl.worker:
     main: src/bin/tmux.repl.worker.cr
+  tmux.repl.custom_repl:
+    main: src/bin/tmux.repl.custom_repl.cr
+  tmux.repl.custom_repl.test:
+    main: src/bin/tmux.repl.custom_repl.test.cr
 dependencies:
   pty:
     github: ch1c0t/crystal.pty

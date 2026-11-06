@@ -5,6 +5,7 @@ getter start_directory : String?
 getter input_executable : String?
 getter output_executable : String?
 getter worker_executable : String?
+getter custom_command_mode : Bool
 getter state : State
 
 # Resolve companion executables in this order:
@@ -59,12 +60,14 @@ def initialize(
   @start_directory : String? = nil,
   @input_executable : String? = nil,
   @output_executable : String? = nil,
-  @worker_executable : String? = nil
+  @worker_executable : String? = nil,
+  @custom_command_mode : Bool = false
 )
   @state = State.new(@name)
 
   if command = @command
     raise ArgumentError.new("REPL command must not be empty") if command.empty?
+    raise ArgumentError.new("A custom REPL cannot also configure a native command") if @custom_command_mode
   end
 end
 

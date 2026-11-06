@@ -5,7 +5,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
 
   begin
     @state.prepare
-    unless @command
+    if !@command && !@custom_command_mode
       File.write(File.join(dir, "input.startup"), "launching #{resolved_input_executable}")
     end
 
@@ -28,7 +28,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
     end
     session = created
 
-    unless @command
+    if !@command && !@custom_command_mode
       wait_for_ready(File.join(dir, "input.pid"), resolved_input_executable)
       File.write(File.join(dir, "worker.startup"), "launching #{resolved_worker_executable}")
       worker_environment = {} of String => String?
@@ -44,6 +44,8 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
         error: Process::Redirect::Close
       )
       wait_for_ready(File.join(dir, "worker.pid"), resolved_worker_executable)
+    elsif @custom_command_mode
+      wait_for_ready(File.join(dir, "input.pid"), resolved_input_executable)
     end
 
     configure_session(created)
@@ -106,12 +108,13 @@ private def configure_session(session : Tmux::Session) : Nil
     )
     input_pane.send_keys(input_command, literal: true)
   else
-    File.write(File.join(state_dir, "output.startup"), "launching #{resolved_output_executable}")
+    File.write(File.join(state_dir, "output.startup"), "launching #{resolved_output_executable}") unless @custom_command_mode
     input_pane.split(
       :right,
       detached: true,
       command: [resolved_output_executable, @name]
     )
+    input_pane.select
   end
 
   window.select_layout("even-horizontal")
