@@ -18,9 +18,8 @@ module LavinMQProcess
     def initialize
       @name = "repl_lavinmq_spec_#{Process.pid}"
       @state_home = File.join(ENV["TMPDIR"]? || "/tmp", "tmux-repl-lavinmq-#{Process.pid}")
-      state_dir = File.join(@state_home, "tmux-repl", @name)
-      @worker_pid_path = File.join(state_dir, "worker.pid")
-      @ready_paths = %w[input.pid worker.pid output.pid].map { |file| File.join(state_dir, file) }
+      @worker_pid_path = ""
+      @ready_paths = [] of String
 
       @previous_environment = {
         "XDG_STATE_HOME" => ENV["XDG_STATE_HOME"]?,

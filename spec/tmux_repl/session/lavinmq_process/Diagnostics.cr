@@ -216,7 +216,8 @@ module LavinMQProcess
     end
 
     private def keyboard_trace_snapshot : String
-      path = File.join(@state_home, "tmux-repl", name, "keyboard.trace.log")
+      state_dir = TmuxREPL::State.session_path(name)
+      path = File.join(state_dir, "logs", "keyboard.trace.log")
       return DiagnosticFormatting.frame("KEYBOARD TRACE", "missing: #{path}") unless File.exists?(path)
 
       trace_lines = File.read(path).lines.last(30)

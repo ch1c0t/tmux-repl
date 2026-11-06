@@ -5,6 +5,10 @@ module LavinMQProcess
       ENV["LOG_LEVEL"] = "TRACE"
       FileUtils.mkdir_p(@state_home)
 
+      state_dir = TmuxREPL::State.session_path(name)
+      @worker_pid_path = File.join(state_dir, "worker.pid")
+      @ready_paths = %w[input.pid worker.pid output.pid].map { |file| File.join(state_dir, file) }
+
       # Start tmux before adding bin/ to PATH: its daemon keeps the original PATH.
       ENV["PATH"] = "/usr/bin:/bin"
       ENV.delete("TMUX")
