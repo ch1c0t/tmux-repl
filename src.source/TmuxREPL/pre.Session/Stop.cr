@@ -6,12 +6,16 @@ def stop : Nil
     server.cmd("kill-session", "-t", @name)
   rescue Tmux::Error
   ensure
-    FileUtils.rm_rf(state_dir)
+    @state.cleanup_runtime
   end
 end
 
 private def stop_worker : Nil
-  ready_path = File.join(state_dir, "worker.pid")
+  ready_path = @state.path("worker.pid")
+  unless File.exists?(ready_path) || File.exists?(@state.manifest_path)
+    legacy_path = State.legacy_path(@name)
+    ready_path = File.join(legacy_path, "worker.pid")
+  end
   return unless File.exists?(ready_path)
 
   pid = File.read(ready_path).strip.to_i64?

@@ -121,7 +121,7 @@ jobs:
             exit 1
           fi
 
-          report_dir="$HOME/.local/state/tmux-repl/smoke-tests"
+          report_dir="${XDG_STATE_HOME:-$HOME/.local/state}/tmux.repl/smoke-tests"
           report_path="$(find "$report_dir" -maxdepth 1 -type f -name 'smoke-test-*.json' -print -quit)"
           if [ -z "$report_path" ]; then
             echo "tmux.repl.test did not produce its JSON report in $report_dir." >&2
@@ -144,8 +144,9 @@ jobs:
         if: always()
         run: |
           mkdir -p "$RUNNER_TEMP/tmux-repl-smoke-tests"
-          if [ -d "$HOME/.local/state/tmux-repl/smoke-tests" ]; then
-            cp -a "$HOME/.local/state/tmux-repl/smoke-tests/." "$RUNNER_TEMP/tmux-repl-smoke-tests/"
+          report_dir="${XDG_STATE_HOME:-$HOME/.local/state}/tmux.repl/smoke-tests"
+          if [ -d "$report_dir" ]; then
+            cp -a "$report_dir/." "$RUNNER_TEMP/tmux-repl-smoke-tests/"
           fi
       - name: Upload tmux.repl smoke-test report
         if: always()

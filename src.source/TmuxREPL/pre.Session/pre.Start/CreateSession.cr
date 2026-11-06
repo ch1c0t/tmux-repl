@@ -4,7 +4,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
   worker_process : Process? = nil
 
   begin
-    FileUtils.mkdir_p(dir)
+    @state.prepare
     unless @command
       File.write(File.join(dir, "input.startup"), "launching #{resolved_input_executable}")
     end
@@ -15,7 +15,7 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
         name: @name,
         detached: true,
         start_directory: @start_directory,
-        environment: @environment
+        environment: session_environment
       )
     else
       server.new_session(
@@ -31,9 +31,14 @@ private def create_session(server : Tmux::Server, focus : Bool) : Nil
     unless @command
       wait_for_ready(File.join(dir, "input.pid"), resolved_input_executable)
       File.write(File.join(dir, "worker.startup"), "launching #{resolved_worker_executable}")
+      worker_environment = {} of String => String?
+      ENV.each { |key, value| worker_environment[key] = value }
+      session_environment.each { |key, value| worker_environment[key] = value }
+
       worker_process = Process.new(
         resolved_worker_executable,
         ["--worker", @name, created.session_id],
+        env: worker_environment,
         input: Process::Redirect::Close,
         output: Process::Redirect::Close,
         error: Process::Redirect::Close
@@ -126,5 +131,5 @@ private def cleanup_failed_start(server : Tmux::Server, session : Tmux::Session?
     end
   rescue Tmux::Error
   end
-  FileUtils.rm_rf(dir)
+  @state.cleanup_runtime
 end

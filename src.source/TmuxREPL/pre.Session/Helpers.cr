@@ -5,6 +5,7 @@ private def amqp_environment : Hash(String, String)
   environment = {"LAVINMQ_AMQP_UNIXSOCKET" => socket_path}
   environment.merge!(@environment)
   environment["TMUX_REPL_SESSION_NAME"] = @name
+  environment["TMUX_REPL_SESSION_STATE"] = @state.base_path
 
   unless environment.has_key?("XDG_STATE_HOME")
     if state_home = ENV["XDG_STATE_HOME"]?
@@ -20,14 +21,20 @@ private def amqp_environment : Hash(String, String)
 
   if TmuxREPL.trace_timing_enabled?
     environment["TMUX_REPL_TRACE_TIMING"] = "1"
-    environment["TMUX_REPL_TRACE_FILE"] = File.join(state_dir, "timing.log")
+    environment["TMUX_REPL_TRACE_FILE"] = @state.log_path("timing.log")
   end
   environment
 end
 
 private def state_dir : String
-  base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-  File.join(base, "tmux-repl", @name)
+  @state.base_path
+end
+
+private def session_environment : Hash(String, String)
+  environment = @environment.dup
+  environment["TMUX_REPL_SESSION_NAME"] = @name
+  environment["TMUX_REPL_SESSION_STATE"] = @state.base_path
+  environment
 end
 
 private def resolved_input_executable : String

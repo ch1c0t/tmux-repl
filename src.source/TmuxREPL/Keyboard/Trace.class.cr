@@ -18,9 +18,8 @@ def initialize(session_name : String, pane : String, path : String? = nil)
 end
 
 def self.path_for(session_name : String) : String
-  base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
   session = ENV["TMUX_REPL_SESSION_NAME"]? || session_name
-  File.join(base, "tmux-repl", session, "keyboard.trace.log")
+  TmuxREPL::State.open(session).log_path("keyboard.trace.log")
 end
 
 def record(press : KeyPress, action : String, result : String) : Nil

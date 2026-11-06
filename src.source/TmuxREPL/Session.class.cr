@@ -5,6 +5,7 @@ getter start_directory : String?
 getter input_executable : String?
 getter output_executable : String?
 getter worker_executable : String?
+getter state : State
 
 # Resolve companion executables in this order:
 # explicit override, sibling of tmux.repl, then caller's PATH.
@@ -60,6 +61,8 @@ def initialize(
   @output_executable : String? = nil,
   @worker_executable : String? = nil
 )
+  @state = State.new(@name)
+
   if command = @command
     raise ArgumentError.new("REPL command must not be empty") if command.empty?
   end

@@ -1,6 +1,5 @@
 private def state_dir : String
-  base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-  File.join(base, "tmux-repl", @session_name)
+  @state.base_path
 end
 
 private def output_pid_path : String

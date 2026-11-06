@@ -13,11 +13,7 @@ def trace_timing(
 ) : Nil
   return unless trace_timing_enabled?
 
-  trace_path = ENV["TMUX_REPL_TRACE_FILE"]?
-  unless trace_path
-    base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-    trace_path = File.join(base, "tmux-repl", session_name, "timing.log")
-  end
+  trace_path = ENV["TMUX_REPL_TRACE_FILE"]? || State.open(session_name).log_path("timing.log")
 
   elapsed = if start = started_at
     " elapsed_ms=#{(Time.instant - start).total_milliseconds.round(2)}"

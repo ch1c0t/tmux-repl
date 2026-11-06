@@ -111,6 +111,31 @@ session; when launched outside tmux, it attaches a client. Use
 start(focus: false) to create or ensure the session without attaching or
 switching clients.
 
+## Session state
+
+Session state is stored under `$XDG_STATE_HOME/tmux.repl`, or
+`$HOME/.local/state/tmux.repl` when `XDG_STATE_HOME` is unset. Each Tmux
+session gets a collision-resistant directory under `sessions/`:
+
+    sessions/<safe-session-name>-<name-hash>/
+      session.yml
+      input.pid, input.startup, input.error
+      output.pid, output.startup, output.error
+      worker.pid, worker.startup, worker.error
+      logs/
+        keyboard.trace.log
+        timing.log
+
+The YAML manifest records the exact `session_name` and absolute `base_path`,
+so companion processes can resolve the original Tmux name and session directory
+without reconstructing either from a filesystem-safe slug. Stopping a session
+removes transient PID/startup files and captured output, but preserves its
+manifest, startup-error details, and diagnostic logs.
+
+The interactive smoke-test report is stored separately under
+`$XDG_STATE_HOME/tmux.repl/smoke-tests` (or the corresponding default state
+directory when XDG_STATE_HOME is unset).
+
 ## LavinMQ streams
 
 Each shell-command session uses two durable LavinMQ streams:
@@ -145,8 +170,8 @@ Start a new session with timing diagnostics enabled:
 
     TMUX_REPL_TRACE_TIMING=1 tmux.repl start latency-debug
 
-Run a few commands, including the first one, then inspect
-$XDG_STATE_HOME/tmux-repl/latency-debug/timing.log (or
-$HOME/.local/state/tmux-repl/latency-debug/timing.log when XDG_STATE_HOME is unset).
+Run a few commands, including the first one, then inspect the session's `logs/timing.log` file. Its location is recorded in
+`session.yml` under the corresponding `sessions/<safe-session-name>-<name-hash>/`
+directory.
 The trace separates input publication, worker delivery, PTY execution, output-event publication, and output-pane rendering.
 Tracing is disabled by default.

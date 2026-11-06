@@ -1,4 +1,6 @@
 file_utils
+yaml
+digest/sha256
 json
 tmux
 global-amqp_channel

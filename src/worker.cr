@@ -181,8 +181,8 @@ module Worker
       @shutdown = Channel(Nil).new(1)
       @session = PTY::Session.new(:sh)
     
-      base = ENV["XDG_STATE_HOME"]? || File.join(ENV["HOME"]? || ".", ".local", "state")
-      @state_dir = File.join(base, "tmux-repl", @session_name)
+      @state = TmuxREPL::State.open(@session_name)
+      @state_dir = @state.base_path
       @ready_path = File.join(@state_dir, "worker.pid")
       @startup_error_path = File.join(@state_dir, "worker.error")
       @startup_stage_path = File.join(@state_dir, "worker.startup")

@@ -1,3 +1,5 @@
+require "./tmux_repl"
+
 class SmokeTest
   module Private
     private def start_repl : Nil
@@ -159,8 +161,7 @@ class SmokeTest
     private def write_machine_report : String
       passed = @report.all? { |check| check[:passed] }
       finished_at = Time.utc.to_unix_ms
-      home = ENV["HOME"]? || raise "HOME is not set."
-      directory = File.join(home, ".local", "state", "tmux-repl", "smoke-tests")
+      directory = TmuxREPL::State.smoke_tests_path
       FileUtils.mkdir_p(directory)
     
       path = File.join(directory, "smoke-test-#{@started_at.to_unix_ms}.json")

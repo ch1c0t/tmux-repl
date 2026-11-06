@@ -1,3 +1,5 @@
+require "./tmux_repl"
+
 TIMEOUT = 8.seconds
 
 @server : Tmux::Server
