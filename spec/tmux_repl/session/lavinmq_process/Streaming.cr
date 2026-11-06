@@ -77,7 +77,8 @@ module LavinMQProcess
 
     private def verify_keyboard_trace : Nil
       @stage = "wait for keyboard trace events"
-      path = File.join(@state_home, "tmux-repl", name, "keyboard.trace.log")
+      state_dir = TmuxREPL::State.session_path(name)
+      path = File.join(state_dir, "logs", "keyboard.trace.log")
       recorded = wait_until(3.seconds, 25.milliseconds) do
         next false unless File.exists?(path)
 
