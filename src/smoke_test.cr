@@ -1,5 +1,3 @@
-require "./tmux_repl"
-
 class SmokeTest
   module Private
     private def start_repl : Nil
