@@ -120,6 +120,220 @@ module TmuxREPL
   extend Publishing
   extend TraceTiming
 
+  class CommandContext
+    @output = String::Builder.new
+    
+    def initialize(
+      @session_name : String,
+      @sequence : UInt64,
+      @events : AMQP::Client::Queue
+    )
+    end
+    
+    # Publish a chunk immediately so long-running handlers can stream progress.
+    def write(chunk : String) : Nil
+      return if chunk.empty?
+    
+      @output << chunk
+      TmuxREPL.publish_event(
+        @events,
+        "output",
+        @session_name,
+        @sequence,
+        chunk: chunk
+      )
+    end
+    
+    def puts(value : String = "") : Nil
+      write("#{value}\n")
+    end
+    
+    def output : String
+      @output.to_s
+    end
+  end
+
+  module CommandLine
+    # Tokenize a custom command without invoking a shell.
+    # Single/double quotes group arguments; backslash escapes outside single quotes.
+    def self.parse(line : String) : Array(String)
+      arguments = [] of String
+      token = String::Builder.new
+      token_started = false
+      quote : Char? = nil
+      escaped = false
+    
+      line.each_char do |character|
+        if escaped
+          token << character
+          escaped = false
+          token_started = true
+        elsif quote == '\''
+          if character == '\''
+            quote = nil
+          else
+            token << character
+          end
+        elsif quote == '"'
+          case character
+          when '"'
+            quote = nil
+          when '\\'
+            escaped = true
+          else
+            token << character
+          end
+        elsif character == '\'' || character == '"'
+          quote = character
+          token_started = true
+        elsif character == '\\'
+          escaped = true
+          token_started = true
+        elsif character.whitespace?
+          if token_started
+            arguments << token.to_s
+            token = String::Builder.new
+            token_started = false
+          end
+        else
+          token << character
+          token_started = true
+        end
+      end
+    
+      raise ArgumentError.new("Trailing escape in command") if escaped
+      raise ArgumentError.new("Unterminated quote in command") if quote
+    
+      arguments << token.to_s if token_started
+      arguments
+    end
+  end
+
+  class CustomCommandHost
+    def initialize(
+      @session_name : String,
+      @handlers : Hash(String, Proc(CommandContext, Array(String), Nil))
+    )
+      @shutdown = Channel(Nil).new(1)
+      @stopped = false
+      @events : AMQP::Client::Queue? = nil
+    end
+    
+    # Connect before the input pane is started so its first command cannot race
+    # the stream consumer's subscription.
+    def start : Nil
+      channel = Global.amqp_channel
+      channel.prefetch(1)
+    
+      commands = TmuxREPL.stream_queue(
+        channel,
+        TmuxREPL.commands_queue_name(@session_name)
+      )
+      @events = TmuxREPL.stream_queue(
+        channel,
+        TmuxREPL.events_queue_name(@session_name)
+      )
+    
+      commands.subscribe(
+        no_ack: false,
+        block: false,
+        args: AMQ::Protocol::Table.new(
+          {"x-stream-offset" => "next"} of String => AMQ::Protocol::Field
+        )
+      ) do |message|
+        begin
+          data = JSON.parse(message.body_io.to_s)
+          process_message(data) if data["type"].as_s == "command"
+          message.ack
+        rescue ex
+          STDERR.puts "tmux.repl custom host: command failed: #{ex.class}: #{ex.message}"
+          begin
+            message.reject(requeue: false)
+          rescue
+          end
+        end
+      end
+    end
+    
+    # Keep the application process alive while its custom Tmux session exists.
+    def wait : Nil
+      server = ENV["TMUX"]?.nil? ? Tmux::Server.new : Tmux::Server.from_env
+      tmux_session = server.session(@session_name)
+      tmux_session_id = tmux_session.session_id
+    
+      loop do
+        break unless server.cmd("has-session", "-t", tmux_session_id).success?
+    
+        select
+        when @shutdown.receive
+          break
+        when timeout(250.milliseconds)
+        end
+      end
+    ensure
+      @stopped = true
+    end
+    
+    def stop : Nil
+      return if @stopped
+    
+      @shutdown.send(nil)
+    end
+    
+    private def process_message(data : JSON::Any) : Nil
+      sequence = data["sequence"].as_i64.to_u64
+      command = data["command"].as_s
+      session_name = data["session"].as_s
+      raise "Command belongs to #{session_name.inspect}, not #{@session_name.inspect}" unless session_name == @session_name
+    
+      events = @events || raise "Custom command host has not been started."
+      received_at = Time.instant
+      TmuxREPL.trace_timing(
+        @session_name,
+        "custom",
+        "command_received",
+        details: "sequence=#{sequence} command_bytes=#{command.bytesize}"
+      )
+    
+      TmuxREPL.publish_event(events, "started", @session_name, sequence, command: command)
+      context = CommandContext.new(@session_name, sequence, events)
+      status = 0
+    
+      begin
+        arguments = CommandLine.parse(command)
+        if arguments.empty?
+          context.puts("Empty command.")
+          status = 2
+        elsif handler = @handlers[arguments.first]?
+          handler.call(context, arguments[1, arguments.size - 1])
+        else
+          context.puts("Unknown command: #{arguments.first}")
+          status = 127
+        end
+      rescue ex
+        context.puts("Error: #{ex.message || ex.class}")
+        status = 1
+      end
+    
+      TmuxREPL.publish_event(
+        events,
+        "complete",
+        @session_name,
+        sequence,
+        command: command,
+        status: status,
+        clean_output: context.output
+      )
+      TmuxREPL.trace_timing(
+        @session_name,
+        "custom",
+        "command_processing_finished",
+        received_at,
+        "sequence=#{sequence} status=#{status}"
+      )
+    end
+  end
+
   class Definition
     getter name : String
     
@@ -129,6 +343,8 @@ module TmuxREPL
     @input_executable : String?
     @output_executable : String?
     @worker_executable : String?
+    @handlers : Hash(String, Proc(CommandContext, Array(String), Nil))
+    @host : CustomCommandHost?
     
     def initialize(@name : String)
       @command = nil
@@ -137,16 +353,42 @@ module TmuxREPL
       @input_executable = nil
       @output_executable = nil
       @worker_executable = nil
+      @handlers = {} of String => Proc(CommandContext, Array(String), Nil)
+      @host = nil
     end
     
     # Configure a native interactive program for this REPL.
-    # With no command configured, the standard shell/PTY worker is used.
+    # With no command or custom handlers, the standard shell/PTY worker is used.
     def command(*arguments : String) : self
       configure_command(arguments.to_a)
     end
     
     def command(arguments : Array(String)) : self
       configure_command(arguments)
+    end
+    
+    # Register an application command. Handlers run in the process that owns this
+    # Definition, not in the separate PTY worker.
+    def on_command(
+      name : String,
+      &handler : CommandContext, Array(String) -> Nil
+    ) : self
+      raise ArgumentError.new("Cannot register custom commands with a native REPL command") if @command
+      unless name.match(/\A[a-zA-Z][a-zA-Z0-9_-]*\z/)
+        raise ArgumentError.new("Invalid custom command name: #{name.inspect}")
+      end
+      raise ArgumentError.new("Custom command #{name.inspect} is already registered") if @handlers.has_key?(name)
+    
+      @handlers[name] = handler
+      self
+    end
+    
+    def command_names : Array(String)
+      @handlers.keys.sort
+    end
+    
+    def custom_commands? : Bool
+      !@handlers.empty?
     end
     
     def env(name : String, value : String) : self
@@ -178,6 +420,8 @@ module TmuxREPL
     end
     
     def session : Session
+      raise ArgumentError.new("A REPL cannot combine a native command with custom handlers") if @command && custom_commands?
+    
       Session.new(
         @name,
         command: @command,
@@ -185,22 +429,47 @@ module TmuxREPL
         start_directory: @start_directory,
         input_executable: @input_executable,
         output_executable: @output_executable,
-        worker_executable: @worker_executable
+        worker_executable: @worker_executable,
+        custom_command_mode: custom_commands?
       )
     end
     
     def start(focus : Bool = true) : Session
+      raise "Custom REPL is already started" if @host
+    
       repl_session = session
+      if custom_commands?
+        @host = CustomCommandHost.new(@name, @handlers.dup)
+        @host.not_nil!.start
+      end
+    
       repl_session.start(focus)
       repl_session
+    rescue ex
+      @host.try &.stop
+      @host = nil
+      raise ex
+    end
+    
+    # Block the application process while the custom REPL session is alive.
+    # The command consumer is connected by start before the input pane is exposed.
+    def serve : Nil
+      host = @host || raise "No custom command host is active; register commands and call start first."
+      begin
+        host.wait
+      ensure
+        @host = nil
+      end
     end
     
     def stop : Nil
+      @host.try &.stop
       session.stop
     end
     
     private def configure_command(arguments : Array(String)) : self
       raise ArgumentError.new("REPL command must not be empty") if arguments.empty?
+      raise ArgumentError.new("Cannot configure a native command after registering custom handlers") if custom_commands?
     
       @command = arguments.dup
       self
@@ -1012,7 +1281,7 @@ module TmuxREPL
         
           begin
             @state.prepare
-            unless @command
+            if !@command && !@custom_command_mode
               File.write(File.join(dir, "input.startup"), "launching #{resolved_input_executable}")
             end
         
@@ -1035,7 +1304,7 @@ module TmuxREPL
             end
             session = created
         
-            unless @command
+            if !@command && !@custom_command_mode
               wait_for_ready(File.join(dir, "input.pid"), resolved_input_executable)
               File.write(File.join(dir, "worker.startup"), "launching #{resolved_worker_executable}")
               worker_environment = {} of String => String?
@@ -1051,6 +1320,8 @@ module TmuxREPL
                 error: Process::Redirect::Close
               )
               wait_for_ready(File.join(dir, "worker.pid"), resolved_worker_executable)
+            elsif @custom_command_mode
+              wait_for_ready(File.join(dir, "input.pid"), resolved_input_executable)
             end
         
             configure_session(created)
@@ -1113,12 +1384,13 @@ module TmuxREPL
             )
             input_pane.send_keys(input_command, literal: true)
           else
-            File.write(File.join(state_dir, "output.startup"), "launching #{resolved_output_executable}")
+            File.write(File.join(state_dir, "output.startup"), "launching #{resolved_output_executable}") unless @custom_command_mode
             input_pane.split(
               :right,
               detached: true,
               command: [resolved_output_executable, @name]
             )
+            input_pane.select
           end
         
           window.select_layout("even-horizontal")
@@ -1141,7 +1413,7 @@ module TmuxREPL
           @state.cleanup_runtime
         end
       end
-    
+
       def start(focus : Bool = true) : Nil
         # Resolve XDG_STATE_HOME when starting or attaching. Session objects may be
         # constructed before callers set their session-specific environment.
@@ -1226,6 +1498,7 @@ module TmuxREPL
     getter input_executable : String?
     getter output_executable : String?
     getter worker_executable : String?
+    getter custom_command_mode : Bool
     getter state : State
     
     # Resolve companion executables in this order:
@@ -1280,12 +1553,14 @@ module TmuxREPL
       @start_directory : String? = nil,
       @input_executable : String? = nil,
       @output_executable : String? = nil,
-      @worker_executable : String? = nil
+      @worker_executable : String? = nil,
+      @custom_command_mode : Bool = false
     )
       @state = State.new(@name)
     
       if command = @command
         raise ArgumentError.new("REPL command must not be empty") if command.empty?
+        raise ArgumentError.new("A custom REPL cannot also configure a native command") if @custom_command_mode
       end
     end
     
