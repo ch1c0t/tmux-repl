@@ -47,6 +47,7 @@ module Output
         end
       end
       
+      
       private def toggle_output_zoom(view : View) : Nil
         pane = Tmux::Pane.from_env
         pane.select
