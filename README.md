@@ -3,9 +3,10 @@
 A reusable two-pane Tmux REPL library and command-line tools, implemented in Crystal.
 
 The tmux.repl executable orchestrates a named Tmux session. The left and right
-panes run separate frontends, while a background PTY worker executes shell
-commands. The three companion executables are independent processes so
-reply and crystal.pty are never imported by the same executable.
+panes run separate frontends. Standard REPLs use a background PTY worker for
+shell commands; custom-command REPLs dispatch registered handlers in the
+application process that owns their state. The companion executables are
+independent processes so reply and crystal.pty are never imported by the same executable.
 
 ## Executable roles
 
@@ -110,6 +111,47 @@ When launched inside tmux, start switches the current client to the REPL
 session; when launched outside tmux, it attaches a client. Use
 start(focus: false) to create or ensure the session without attaching or
 switching clients.
+
+## Custom-command REPLs
+
+Use `on_command` when commands need access to objects owned by the application
+process, rather than a shell or a separate PTY worker. Handlers receive a
+`TmuxREPL::CommandContext` for streamed output and an array of parsed arguments:
+
+    repl = TmuxREPL.define("vm") do |definition|
+      definition.on_command("ocr") do |context, arguments|
+        context.puts(vm.latest_ocr)
+      end
+
+      definition.on_command("key") do |context, arguments|
+        action, key = arguments
+        vm.send_key(action, key)
+        context.puts("Sent #{action} #{key}")
+      end
+    end
+
+    repl.start(focus: false)
+    repl.serve
+
+`start` subscribes the application process to the session's command stream
+before exposing the input pane. Custom sessions use the regular input/output
+frontends but do not start `tmux.repl.worker`. Call `serve` from the process
+that owns the handlers; it blocks until the Tmux session is closed. This lets a
+handler use an existing VM, browser, database connection, or other in-process
+application state without serializing it into a worker.
+
+The handler receives the command's arguments as strings. Single and double
+quotes group arguments, and backslashes escape characters outside single
+quotes. Custom commands are not passed to a shell and are never shell-evaluated.
+Use `context.write(chunk)` to stream output as it becomes available, or
+`context.puts(text)` to publish a line. Unknown commands complete with exit
+status 127; handler exceptions are displayed in the output pane with exit
+status 1.
+
+A generic fake-backend fixture and its Tmux end-to-end test are available as
+`tmux.repl.custom_repl` and `tmux.repl.custom_repl.test`. Run the test from
+inside the Tmux session you want to return to. It exercises output streaming,
+argument parsing, unknown commands, and handler failures without requiring a VM.
 
 ## Session state
 
