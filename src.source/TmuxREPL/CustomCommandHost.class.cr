@@ -1,10 +1,12 @@
+@events : AMQP::Client::Queue?
+
 def initialize(
   @session_name : String,
   @handlers : Hash(String, Proc(CommandContext, Array(String), Nil))
 )
   @shutdown = Channel(Nil).new(1)
   @stopped = false
-  @events : AMQP::Client::Queue? = nil
+  @events = nil
 end
 
 # Connect before the input pane is started so its first command cannot race
