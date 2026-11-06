@@ -140,7 +140,7 @@ module TmuxREPL
       @base_path = self.class.session_path(@session_name)
     end
 
-    private def initialize(@session_name : String, @base_path : String)
+    def initialize(@session_name : String, @base_path : String)
     end
 
     # Create the session directory and its manifest before any companion process
