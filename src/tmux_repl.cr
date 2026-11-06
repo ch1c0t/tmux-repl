@@ -1161,9 +1161,6 @@ module TmuxREPL
     module Start
       module CreateSession
         private def create_session(server : Tmux::Server, focus : Bool) : Nil
-          # Resolve XDG_STATE_HOME at startup, not when Session.new is called. Callers
-          # commonly configure the state home immediately before starting a session.
-          @state = State.new(@name)
           dir = state_dir
           session : Tmux::Session? = nil
           worker_process : Process? = nil
@@ -1301,6 +1298,9 @@ module TmuxREPL
       end
     
       def start(focus : Bool = true) : Nil
+        # Resolve XDG_STATE_HOME when starting or attaching. Session objects may be
+        # constructed before callers set their session-specific environment.
+        @state = State.new(@name)
         server = current_server
         if session = find_session(server)
           activate(session) if focus

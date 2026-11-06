@@ -1,7 +1,4 @@
 private def create_session(server : Tmux::Server, focus : Bool) : Nil
-  # Resolve XDG_STATE_HOME at startup, not when Session.new is called. Callers
-  # commonly configure the state home immediately before starting a session.
-  @state = State.new(@name)
   dir = state_dir
   session : Tmux::Session? = nil
   worker_process : Process? = nil
