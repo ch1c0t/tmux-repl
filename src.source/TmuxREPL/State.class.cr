@@ -1,4 +1,3 @@
-class State
   MANIFEST_NAME = "session.yml"
   LOG_DIRECTORY = "logs"
   RUNTIME_FILES = [
@@ -151,4 +150,3 @@ class State
       end
     end
   end
-end
