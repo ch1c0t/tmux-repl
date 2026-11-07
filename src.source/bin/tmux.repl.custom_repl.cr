@@ -1,16 +1,6 @@
 require "../tmux_repl"
 
-class CustomREPLFixtureBackend
-  def latest_ocr : String
-    "SCREEN OCR: fixture display is ready"
-  end
-
-  def send_key(action : String, key : String) : String
-    "KEY EVENT: #{action} #{key}"
-  end
-end
-
-backend = CustomREPLFixtureBackend.new
+backend = CustomREPL::FixtureBackend.new
 session_name = ENV["TMUX_REPL_SESSION"]? || "tmux-repl-custom-fixture"
 
 definition = TmuxREPL.define(session_name) do |repl|
@@ -37,10 +27,8 @@ definition = TmuxREPL.define(session_name) do |repl|
 end
 
 begin
-  # Interactive use should enter the new Tmux session. The end-to-end test
-  # explicitly opts out so it can inspect the panes from its controlling client.
-  focus = ENV["TMUX_REPL_CUSTOM_REPL_FOCUS"]? != "0"
-  definition.start(focus: focus)
+  # Exercise the same foreground launch path used by an interactive custom REPL.
+  definition.start
   definition.serve
 rescue ex
   STDERR.puts "tmux.repl.custom_repl: #{ex.class}: #{ex.message}"
