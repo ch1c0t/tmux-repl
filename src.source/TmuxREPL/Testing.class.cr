@@ -267,7 +267,7 @@ def start_custom(definition : Definition) : self
   self
 end
 
-def step(name : String, &block : ->) : Nil
+def step(name : String, &block : -> T) : Nil forall T
   started_at = Time.instant
   @stage = name
 
