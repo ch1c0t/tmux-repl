@@ -313,7 +313,13 @@ def expect_visible(
   *expected : String,
   timeout : Time::Span = DEFAULT_TIMEOUT
 ) : Nil
-  expected_items = expected.to_a
+  expect_visible_items(expected.to_a, timeout)
+end
+
+def expect_visible_items(
+  expected_items : Array(String),
+  timeout : Time::Span = DEFAULT_TIMEOUT
+) : Nil
   last_text = ""
   found = wait_until(timeout) do
     last_text = current_output
@@ -361,7 +367,7 @@ def expect_command_output(
   expected : Array(String),
   timeout : Time::Span
 ) : Nil
-  expect_visible(*(["INPUT ##{sequence}"] + expected), timeout: timeout)
+  expect_visible_items(["INPUT ##{sequence}"] + expected, timeout)
 end
 
 def expect_command_status(
