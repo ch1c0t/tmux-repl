@@ -1,33 +1,33 @@
 require "../../src/tmux_repl"
 
-describe TmuxREPL::CommandLine do
+describe CustomREPL::CommandLine do
   it "splits unquoted arguments" do
-    TmuxREPL::CommandLine.parse("key press Escape").should eq(["key", "press", "Escape"])
+    CustomREPL::CommandLine.parse("key press Escape").should eq(["key", "press", "Escape"])
   end
 
   it "preserves spaces in single- and double-quoted arguments" do
-    TmuxREPL::CommandLine.parse(%(echo "hello world" 'from a fixture')).should eq(
+    CustomREPL::CommandLine.parse(%(echo "hello world" 'from a fixture')).should eq(
       ["echo", "hello world", "from a fixture"]
     )
   end
 
   it "supports escaped whitespace" do
-    TmuxREPL::CommandLine.parse("echo hello\\ world").should eq(["echo", "hello world"])
+    CustomREPL::CommandLine.parse("echo hello\\ world").should eq(["echo", "hello world"])
   end
 
   it "preserves explicitly empty quoted arguments" do
-    TmuxREPL::CommandLine.parse(%(echo "")).should eq(["echo", ""])
+    CustomREPL::CommandLine.parse(%(echo "")).should eq(["echo", ""])
   end
 
   it "rejects unterminated quotes" do
     expect_raises(ArgumentError, "Unterminated quote") do
-      TmuxREPL::CommandLine.parse(%(echo "unfinished))
+      CustomREPL::CommandLine.parse(%(echo "unfinished))
     end
   end
 
   it "rejects a trailing escape" do
     expect_raises(ArgumentError, "Trailing escape") do
-      TmuxREPL::CommandLine.parse("echo unfinished\\")
+      CustomREPL::CommandLine.parse("echo unfinished\\")
     end
   end
 end
