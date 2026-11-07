@@ -116,7 +116,7 @@ switching clients.
 
 Use `on_command` when commands need access to objects owned by the application
 process, rather than a shell or a separate PTY worker. Handlers receive a
-`TmuxREPL::CommandContext` for streamed output and an array of parsed arguments:
+`CustomREPL::CommandContext` for streamed output and an array of parsed arguments:
 
     repl = TmuxREPL.define("vm") do |definition|
       definition.on_command("ocr") do |context, arguments|
@@ -149,8 +149,11 @@ status 127; handler exceptions are displayed in the output pane with exit
 status 1.
 
 A generic fake-backend fixture and its Tmux end-to-end test are available as
-`tmux.repl.custom_repl` and `tmux.repl.custom_repl.test`. Run the test from
-inside the Tmux session you want to return to. It exercises output streaming,
+`tmux.repl.custom_repl` and `tmux.repl.custom_repl.test`. Running the fixture
+starts and focuses the Tmux session; the process stays alive while it serves
+commands. The test sets `TMUX_REPL_CUSTOM_REPL_FOCUS=0` so it can inspect the
+panes without switching its controlling client. Run the test from inside the
+Tmux session you want to return to. It exercises output streaming,
 argument parsing, unknown commands, and handler failures without requiring a VM.
 
 ## Session state
