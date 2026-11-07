@@ -211,7 +211,7 @@ module TmuxREPL
 
   class CustomCommandHost
     @events : AMQP::Client::Queue?
-
+    
     def initialize(
       @session_name : String,
       @handlers : Hash(String, Proc(CommandContext, Array(String), Nil))
@@ -1415,7 +1415,7 @@ module TmuxREPL
           @state.cleanup_runtime
         end
       end
-
+    
       def start(focus : Bool = true) : Nil
         # Resolve XDG_STATE_HOME when starting or attaching. Session objects may be
         # constructed before callers set their session-specific environment.
