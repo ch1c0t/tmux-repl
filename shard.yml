@@ -6,6 +6,8 @@ authors:
 targets:
   tmux.repl:
     main: src/bin/tmux.repl.cr
+  tmux.repl.custom_repl:
+    main: src/bin/tmux.repl.custom_repl.cr
   tmux.repl.custom_repl.test:
     main: src/bin/tmux.repl.custom_repl.test.cr
   tmux.repl.input:

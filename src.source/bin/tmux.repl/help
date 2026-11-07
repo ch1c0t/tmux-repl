@@ -1,7 +1,7 @@
 tmux.repl - a two-pane command REPL in tmux
 
 Usage:
-  tmux.repl start [SESSION]   Start or attach to a REPL session
+  tmux.repl start [SESSION] [--no-focus]  Start or attach to a REPL session
   tmux.repl stop [SESSION]    Stop a session and remove its state
   tmux.repl --help            Show this help
 
@@ -34,7 +34,7 @@ command passed to TmuxREPL::Session is still supported and is displayed through
 a log-following output pane.
 
 Environment:
-  TMUX_REPL_SESSION          Default session name
+  --no-focus                 Create the session without switching clients\n  TMUX_REPL_SESSION          Default session name
   XDG_STATE_HOME             State directory base
   LAVINMQ_AMQP_UNIXSOCKET     Required LavinMQ AMQP Unix socket
 

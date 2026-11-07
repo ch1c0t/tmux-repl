@@ -2,29 +2,6 @@ require "../tmux_repl"
 
 session_name = "tmux-repl-custom-test-#{Process.pid}-#{Time.utc.to_unix_ms}"
 
-definition = TmuxREPL.define(session_name) do |repl|
-  repl.on_command("ocr") do |context, arguments|
-    raise ArgumentError.new("Usage: ocr") unless arguments.empty?
-    context.puts("SCREEN OCR: fixture display is ready")
-  end
-
-  repl.on_command("key") do |context, arguments|
-    unless arguments.size == 2 && {"press", "release"}.includes?(arguments[0])
-      raise ArgumentError.new("Usage: key press|release KEY")
-    end
-
-    context.puts("KEY EVENT: #{arguments[0]} #{arguments[1]}")
-  end
-
-  repl.on_command("echo") do |context, arguments|
-    context.puts(arguments.join(" "))
-  end
-
-  repl.on_command("fail") do |_context, _arguments|
-    raise "fixture failure"
-  end
-end
-
 begin
   TmuxREPL::Testing.run(
     "tmux.repl.custom_repl",
@@ -32,8 +9,12 @@ begin
     focus: true,
     restore_client: true
   ) do |test|
-    test.step("Start custom REPL in the application process") do
-      test.start_custom(definition)
+    test.step("Start custom REPL in a separate application process") do
+      test.start_host(
+        "./bin/tmux.repl.custom_repl",
+        ["start", session_name],
+        session_name
+      )
     end
 
     test.step("Execute the OCR handler") do

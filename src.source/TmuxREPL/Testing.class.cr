@@ -15,7 +15,12 @@ HOST_STOP_TIMEOUT = 5.seconds
 @stage = "initialize"
 @sequence = 0
 @definition : Definition?
-@host_result : Channel(String)?
+@definition_host_result : Channel(String)?
+@host_process : Process?
+@host_exit : Channel(Process::Status)?
+@host_status : Process::Status?
+@host_log : File?
+@host_log_path : String?
 @event_channel : Channel(Event)?
 @failure : Exception?
 @session_cleaned = false
@@ -321,13 +326,14 @@ def start_cli(
   environment = {} of String => String?
   ENV.each { |key, value| environment[key] = value }
   environment["TMUX_REPL_SESSION"] = nil
-  environment["TMUX_REPL_TEST_FOCUS"] = @focus ? "1" : "0"
+  cli_arguments = arguments.dup
+  cli_arguments << "--no-focus" unless @focus || cli_arguments.includes?("--no-focus")
 
   stdout = IO::Memory.new
   stderr = IO::Memory.new
   status = Process.run(
     executable,
-    arguments,
+    cli_arguments,
     env: environment,
     output: stdout,
     error: stderr
@@ -359,6 +365,61 @@ def start_cli(
   self
 end
 
+
+# Start a custom REPL application in a separate process. The expected session
+# name is explicit, so discovery never depends on a session-name prefix.
+def start_host(
+  executable : String,
+  arguments : Array(String),
+  expected_session_name : String
+) : self
+  raise "A REPL session has already been started." if @session_name
+  raise "Missing #{executable}. Build the executables first with shards build." unless File::Info.executable?(executable)
+  raise "Custom REPL tests require cleanup: :always." unless @cleanup == :always
+  if @server.cmd("has-session", "-t", expected_session_name).success?
+    raise "Tmux session #{expected_session_name.inspect} already exists."
+  end
+
+  @session_name = expected_session_name
+  FileUtils.mkdir_p(State.smoke_tests_path)
+  @host_log_path = File.join(
+    State.smoke_tests_path,
+    "custom-host-#{Process.pid}-#{Time.utc.to_unix_ms}.log"
+  )
+  @host_log = File.open(@host_log_path.not_nil!, "w")
+
+  host_arguments = arguments.dup
+  host_arguments << "--no-focus" unless @focus || host_arguments.includes?("--no-focus")
+
+  process = Process.new(
+    executable,
+    host_arguments,
+    env: {"TMUX_REPL_SESSION" => nil},
+    input: Process::Redirect::Close,
+    output: @host_log.not_nil!,
+    error: @host_log.not_nil!
+  )
+  @host_process = process
+
+  exit_channel = Channel(Process::Status).new(1)
+  @host_exit = exit_channel
+  spawn do
+    exit_channel.send(process.wait)
+  end
+
+  ready = wait_until(@start_timeout) do
+    raise_host_exit!
+    custom_session_ready?(expected_session_name)
+  end
+  unless ready
+    raise "Timed out waiting for custom REPL #{expected_session_name.inspect} to become ready. #{host_diagnostics}"
+  end
+
+  attach_session
+  ensure_foreground! if @focus
+  self
+end
+
 # Start a custom REPL in this process so its handlers retain access to
 # application-owned objects. Custom test sessions are always temporary.
 def start_custom(definition : Definition) : self
@@ -375,7 +436,7 @@ def start_custom(definition : Definition) : self
   @session_name = definition.name
 
   host_result = Channel(String).new(1)
-  @host_result = host_result
+  @definition_host_result = host_result
   spawn do
     result = ""
     begin
@@ -479,11 +540,23 @@ end
 def receive_command_event(result : CommandResult, timeout : Time::Span) : Nil
   events = @event_channel || raise "The REPL event consumer has not started."
 
-  select
-  when event = events.receive
-    result.accept(event) if event.sequence == result.sequence.to_i64
-  when timeout(timeout)
-    raise "Timed out waiting for a protocol event for command ##{result.sequence}."
+  if host_exit = @host_exit
+    select
+    when event = events.receive
+      result.accept(event) if event.sequence == result.sequence.to_i64
+    when status = host_exit.receive
+      @host_status = status
+      raise_host_exit!(status)
+    when timeout(timeout)
+      raise "Timed out waiting for a protocol event for command ##{result.sequence}."
+    end
+  else
+    select
+    when event = events.receive
+      result.accept(event) if event.sequence == result.sequence.to_i64
+    when timeout(timeout)
+      raise "Timed out waiting for a protocol event for command ##{result.sequence}."
+    end
   end
 end
 
@@ -666,15 +739,15 @@ private def return_to_origin : Nil
 end
 
 private def cleanup_session : Nil
-  name = @session_name || return
+  name = @session_name
+  failure : Exception? = nil
 
   if definition = @definition
-    failure : Exception? = nil
     begin
       definition.stop
     rescue ex
       failure = ex
-      @server.cmd("kill-session", "-t", name)
+      @server.cmd("kill-session", "-t", name.not_nil!) if name
     end
 
     begin
@@ -682,36 +755,125 @@ private def cleanup_session : Nil
     rescue ex
       failure ||= ex
     end
-
-    raise failure.not_nil! if failure
   else
+    if name
+      begin
+        Session.new(name).stop
+      rescue ex
+        failure = ex
+        @server.cmd("kill-session", "-t", name)
+      end
+    end
+
     begin
-      Session.new(name).stop
+      stop_host_process
     rescue ex
-      @server.cmd("kill-session", "-t", name)
-      raise ex
+      failure ||= ex
     end
   end
 
-  removed = wait_until(@host_stop_timeout) do
-    !@server.cmd("has-session", "-t", name).success?
+  if name
+    removed = wait_until(@host_stop_timeout) do
+      !@server.cmd("has-session", "-t", name).success?
+    end
+    failure ||= Exception.new("Tmux session #{name.inspect} was not removed.") unless removed
   end
-  raise "Tmux session #{name.inspect} was not removed." unless removed
+
+  raise failure.not_nil! if failure
   @session_cleaned = true
 end
 
 private def wait_for_custom_host : Nil
-  result = @host_result || return
+  result = @definition_host_result || return
   message = ""
 
   select
   when value = result.receive
     message = value
   when timeout(@host_stop_timeout)
-    raise "Timed out waiting for the custom command host to stop."
+    raise "Timed out waiting for the in-process custom command host to stop."
   end
 
   raise "Custom command host failed: #{message}" unless message.empty?
+end
+
+private def custom_session_ready?(name : String) : Bool
+  return false unless @server.cmd("has-session", "-t", name).success?
+
+  state = State.new(name)
+  return false unless File.exists?(state.path("input.pid"))
+  return false unless File.exists?(state.path("output.pid"))
+
+  @server.session(name).active_window.panes.size == 2
+end
+
+private def host_exit_status(timeout : Time::Span) : Process::Status?
+  return @host_status if @host_status
+
+  channel = @host_exit || return nil
+  select
+  when status = channel.receive
+    @host_status = status
+  when timeout(timeout)
+  end
+
+  @host_status
+end
+
+private def raise_host_exit! : Nil
+  status = host_exit_status(0.seconds)
+  raise_host_exit!(status) if status
+end
+
+private def raise_host_exit!(status : Process::Status) : NoReturn
+  close_host_log
+  raise "Custom REPL host process exited with status #{status.exit_code}. #{host_diagnostics}"
+end
+
+private def stop_host_process : Nil
+  process = @host_process
+  unless process
+    close_host_log
+    return
+  end
+
+  status = host_exit_status(@host_stop_timeout)
+  unless status
+    begin
+      process.terminate
+    rescue
+    end
+    status = host_exit_status(@host_stop_timeout)
+  end
+  unless status
+    begin
+      process.terminate(graceful: false)
+    rescue
+    end
+    status = host_exit_status(@host_stop_timeout)
+  end
+
+  unless status
+    raise "Timed out waiting for custom REPL host process #{process.pid} to exit after termination. #{host_diagnostics}"
+  end
+
+  close_host_log
+  raise "Custom REPL host exited with status #{status.exit_code}. #{host_diagnostics}" unless status.success?
+end
+
+private def close_host_log : Nil
+  @host_log.try &.close
+  @host_log = nil
+end
+
+private def host_diagnostics : String
+  path = @host_log_path
+  return "Host log unavailable." unless path
+
+  contents = File.exists?(path) ? File.read(path).strip : ""
+  contents.empty? ? "Host log: #{path}" : "Host log: #{path}\n#{contents}"
+rescue ex
+  "Could not read custom host log: #{ex.message}"
 end
 
 private def write_machine_report : String
@@ -733,6 +895,8 @@ private def write_machine_report : String
       json.field "finished_at_unix_ms", finished_at
       json.field "original_session", @origin_session_name
       json.field "smoke_test_session", @session_name
+      json.field "custom_host_pid", @host_process.try(&.pid)
+      json.field "custom_host_log", @host_log_path
       json.field "session_cleaned", @session_cleaned
       json.field "configuration" do
         json.object do

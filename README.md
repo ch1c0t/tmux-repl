@@ -14,6 +14,7 @@ independent processes so reply and crystal.pty are never imported by the same ex
 - tmux.repl.input reads and publishes commands in the left pane.
 - tmux.repl.output renders the selected input and its associated output.
 - tmux.repl.worker executes commands through PTY::Session and publishes output.
+- tmux.repl.custom_repl is an executable example of an application-owned custom REPL.
 
 Build the executables with:
 
@@ -44,7 +45,7 @@ An explicit DSL/Session override takes precedence over the corresponding
 environment variable; environment variables take precedence over sibling and
 $PATH discovery.
 
-Start a REPL session with tmux.repl start [SESSION]; stop it with
+Start a REPL session with `tmux.repl start [SESSION] [--no-focus]`; stop it with
 tmux.repl stop [SESSION].
 
 When the left pane is active, submit shell commands as usual. Each input gets an
@@ -148,9 +149,15 @@ Use `context.write(chunk)` to stream output as it becomes available, or
 status 127; handler exceptions are displayed in the output pane with exit
 status 1.
 
-The custom REPL smoke test defines its fixture in the test process and uses the
-same `Definition` object for startup, command handling, and shutdown. It does
-not need a separate fixture executable or a VM.
+The `tmux.repl.custom_repl` target is a small executable custom-REPL
+application used as the process-boundary fixture. It defines its handlers,
+starts the session, and blocks in `serve` in its own process. Real applications
+follow the same pattern while closing over their own VM, browser, database
+connection, or other in-process state.
+
+Run the fixture with:
+
+    tmux.repl.custom_repl start SESSION [--no-focus]
 
 ## Testing REPLs
 
@@ -161,19 +168,33 @@ actions and expectations rather than repeating Tmux plumbing.
 
     require "tmux_repl"
 
+    session_name = "my-custom-repl-#{Process.pid}"
+
     TmuxREPL::Testing.run("my REPL", cleanup: :always) do |test|
-      test.start_custom(definition)
+      test.start_host(
+        "./bin/my-custom-repl",
+        ["start", session_name],
+        session_name
+      )
 
       test.step("execute the OCR command") do
         test.submit("ocr").expect_output("SCREEN OCR:").expect_status(0)
       end
     end
 
-`start_cli("./bin/tmux.repl", ["start"])` exercises the real CLI.
-`start_custom(definition)` runs a custom definition in the test process, so
-handlers retain access to the same objects as the application. Custom sessions
-must always be cleaned up because their command host lives in the test process;
-standard REPL sessions can be left open for inspection.
+`start_cli("./bin/tmux.repl", ["start"])` exercises the standard CLI.
+`start_host(executable, arguments, session_name)` launches a long-running
+custom application as a child process, waits for that exact Tmux session and
+both frontend readiness markers, and captures its output in a host log.
+`start_custom(definition)` remains available for faster in-process tests.
+The custom smoke test uses `start_host`, so command handlers are owned by a
+separate application process rather than the test runner. Custom test sessions
+must always be cleaned up; standard REPL sessions can be left open for
+inspection.
+
+When the runner is configured with `focus=0`, it passes `--no-focus` to the
+CLI instead of exporting a test-only environment variable into the application
+process. The standard and custom fixture CLIs both support this option.
 
 The scenario's execution policy is read from environment variables. A
 scenario-specific variable takes precedence over its shared counterpart.
@@ -206,8 +227,8 @@ instead of silently falling back.
 a focused session requires client restoration. `cleanup=on_failure` removes a
 standard REPL session only when the scenario fails; on success it is left open.
 Use `cleanup=always` to remove it in either case, or `never` to always retain
-it. Custom REPL scenarios require `cleanup=always`, since their handler host
-cannot outlive the test process.
+it. Custom REPL scenarios require `cleanup=always`: the runner owns the host
+lifecycle and must stop the child process before it exits.
 
 `submit` returns a command result. Output and completion expectations are
 correlated with the sequence-numbered LavinMQ event stream, then checked against
