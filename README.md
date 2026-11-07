@@ -172,20 +172,56 @@ actions and expectations rather than repeating Tmux plumbing.
 `start_cli("./bin/tmux.repl", ["start"])` exercises the real CLI.
 `start_custom(definition)` runs a custom definition in the test process, so
 handlers retain access to the same objects as the application. Custom sessions
-require `cleanup: :always`; ordinary smoke tests may use `cleanup: :never` to
-leave the session open for inspection.
+must always be cleaned up because their command host lives in the test process;
+standard REPL sessions can be left open for inspection.
+
+The scenario's execution policy is read from environment variables. A
+scenario-specific variable takes precedence over its shared counterpart.
+For example, the custom scenario uses `TMUX_REPL_TEST_CUSTOM_REPL_FOCUS`, then
+falls back to `TMUX_REPL_TEST_FOCUS`.
+
+| Variable | Values | Default |
+|---|---|---|
+| `TMUX_REPL_TEST_FOCUS` | `1` / `0` | `1` |
+| `TMUX_REPL_TEST_RESTORE_CLIENT` | `1` / `0` | `1` |
+| `TMUX_REPL_TEST_CLEANUP` | `always`, `never`, `on_failure` | Scenario default |
+| `TMUX_REPL_TEST_DELAY` | Seconds between successful steps | Scenario default |
+| `TMUX_REPL_TEST_TIMEOUT` | Seconds for command and UI assertions | `8` |
+| `TMUX_REPL_TEST_START_TIMEOUT` | Seconds to discover a started session | `8` |
+| `TMUX_REPL_TEST_HOST_STOP_TIMEOUT` | Seconds to wait for a custom host | `5` |
+
+To configure one scenario without affecting others, insert its name after
+`TMUX_REPL_TEST_`. For example:
+
+    TMUX_REPL_TEST_CUSTOM_REPL_FOCUS=0
+    TMUX_REPL_TEST_CUSTOM_REPL_TIMEOUT=15
+    TMUX_REPL_TEST_TMUX_REPL_CLEANUP=on_failure
+
+Boolean values accept `1/0`, `true/false`, `yes/no`, and `on/off`.
+Durations are non-negative seconds. Invalid values fail the test at startup
+instead of silently falling back.
+
+`focus=0` starts the session without switching the current Tmux client.
+`restore_client=0` leaves the client where the scenario left it. Cleaning up
+a focused session requires client restoration. `cleanup=on_failure` removes a
+standard REPL session only when the scenario fails; on success it is left open.
+Use `cleanup=always` to remove it in either case, or `never` to always retain
+it. Custom REPL scenarios require `cleanup=always`, since their handler host
+cannot outlive the test process.
 
 `submit` returns a command result. Output and completion expectations are
 correlated with the sequence-numbered LavinMQ event stream, then checked against
 the Output pane. Use `press(:input, "C-Up")`,
 `press(:output, "PageDown")`, `expect_selected_input(1)`,
 `expect_visible(...)`, and `expect_zoomed(true)` for presentation checks.
-`step_delay` is only an optional observation pause; it is not used for
+The delay is only an optional observation pause; it is not used for
 synchronization.
 
 Both smoke-test executables write the same versioned JSON report under
 `$XDG_STATE_HOME/tmux.repl/smoke-tests` (or
 `$HOME/.local/state/tmux.repl/smoke-tests` when `XDG_STATE_HOME` is unset).
+The report records the effective configuration as well as each step's result
+and duration.
 
 ## Session state
 
@@ -237,8 +273,9 @@ the available-outputs list, and scrolling from both panes. The test session is
 shown while the checks run, then left open; the client switches back to the
 original session to display the report.
 
-Set `TMUX_REPL_TEST_DELAY` to adjust the pause after each check (seconds,
-default `0.8`) so there is more or less time to observe the session.
+Set `TMUX_REPL_TEST_DELAY` to adjust the pause after each check
+(seconds, default `0.8`). The other `TMUX_REPL_TEST_*` variables described
+above control focus, client restoration, cleanup, and timeouts.
 
 ### Tracing command latency
 

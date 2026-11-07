@@ -29,6 +29,7 @@ begin
   TmuxREPL::Testing.run(
     "tmux.repl.custom_repl",
     cleanup: :always,
+    focus: true,
     restore_client: true
   ) do |test|
     test.step("Start custom REPL in the application process") do

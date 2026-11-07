@@ -1,14 +1,12 @@
 require "../tmux_repl"
 
-delay = ENV["TMUX_REPL_TEST_DELAY"]?.try(&.to_f?) || 0.8
-delay = 0.0 if delay < 0
-
 begin
   TmuxREPL::Testing.run(
     "tmux.repl",
     cleanup: :never,
+    focus: true,
     restore_client: true,
-    step_delay: delay.seconds
+    step_delay: 0.8.seconds
   ) do |test|
     test.step("Run ./bin/tmux.repl start") do
       test.start_cli("./bin/tmux.repl", ["start"])

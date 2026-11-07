@@ -18,12 +18,113 @@ HOST_STOP_TIMEOUT = 5.seconds
 @host_result : Channel(String)?
 @event_channel : Channel(Event)?
 @failure : Exception?
+@session_cleaned = false
 @report = [] of NamedTuple(
   name: String,
   passed: Bool,
   duration_ms: Float64,
   details: String
 )
+
+struct Configuration
+  getter focus : Bool
+  getter cleanup : Symbol
+  getter restore_client : Bool
+  getter step_delay : Time::Span
+  getter timeout : Time::Span
+  getter start_timeout : Time::Span
+  getter host_stop_timeout : Time::Span
+
+  def initialize(
+    @focus : Bool,
+    @cleanup : Symbol,
+    @restore_client : Bool,
+    @step_delay : Time::Span,
+    @timeout : Time::Span,
+    @start_timeout : Time::Span,
+    @host_stop_timeout : Time::Span
+  )
+    unless @cleanup == :always || @cleanup == :never || @cleanup == :on_failure
+      raise ArgumentError.new("cleanup must be always, never, or on_failure; got #{@cleanup.inspect}")
+    end
+
+    if @focus && @cleanup != :never && !@restore_client
+      raise ArgumentError.new("restore_client must be enabled when a focused test session may be cleaned up")
+    end
+  end
+
+  def self.from_env(
+    name : String,
+    focus : Bool,
+    cleanup : Symbol,
+    restore_client : Bool,
+    step_delay : Time::Span,
+    timeout : Time::Span,
+    start_timeout : Time::Span,
+    host_stop_timeout : Time::Span
+  ) : self
+    new(
+      boolean(name, "FOCUS", focus),
+      cleanup_policy(name, cleanup),
+      boolean(name, "RESTORE_CLIENT", restore_client),
+      duration(name, "DELAY", step_delay),
+      duration(name, "TIMEOUT", timeout),
+      duration(name, "START_TIMEOUT", start_timeout),
+      duration(name, "HOST_STOP_TIMEOUT", host_stop_timeout)
+    )
+  end
+
+  private def self.environment_value(name : String, setting : String) : String?
+    scenario = (name.split('.').last? || name).gsub(/[^a-zA-Z0-9]/, "_").upcase
+    full_name = name.gsub(/[^a-zA-Z0-9]/, "_").upcase
+
+    ENV["TMUX_REPL_TEST_#{scenario}_#{setting}"]? ||
+      ENV["TMUX_REPL_TEST_#{full_name}_#{setting}"]? ||
+      ENV["TMUX_REPL_TEST_#{setting}"]?
+  end
+
+  private def self.boolean(name : String, setting : String, default : Bool) : Bool
+    value = environment_value(name, setting)
+    return default unless value
+
+    case value.downcase
+    when "1", "true", "yes", "on"
+      true
+    when "0", "false", "no", "off"
+      false
+    else
+      raise ArgumentError.new("Invalid boolean for TMUX_REPL_TEST_#{setting}: #{value.inspect}")
+    end
+  end
+
+  private def self.cleanup_policy(name : String, default : Symbol) : Symbol
+    value = environment_value(name, "CLEANUP")
+    return default unless value
+
+    case value.downcase
+    when "always"
+      :always
+    when "never"
+      :never
+    when "on_failure"
+      :on_failure
+    else
+      raise ArgumentError.new("Invalid cleanup policy for TMUX_REPL_TEST_CLEANUP: #{value.inspect}")
+    end
+  end
+
+  private def self.duration(name : String, setting : String, default : Time::Span) : Time::Span
+    value = environment_value(name, setting)
+    return default unless value
+
+    seconds = value.to_f?
+    unless seconds && seconds >= 0
+      raise ArgumentError.new("Expected non-negative seconds for TMUX_REPL_TEST_#{setting}, got #{value.inspect}")
+    end
+
+    seconds.seconds
+  end
+end
 
 struct Event
   getter type : String
@@ -47,7 +148,7 @@ class CommandResult
   getter command : String
   getter status : Int32?
 
-  @output = String::Builder.new
+  @output = ""
   @completed = false
 
   def initialize(
@@ -61,9 +162,10 @@ class CommandResult
   # Wait for protocol output first, then verify that the Output pane rendered it.
   def expect_output(
     *expected : String,
-    timeout : Time::Span = Testing::DEFAULT_TIMEOUT
+    timeout : Time::Span? = nil
   ) : self
     expected_items = expected.to_a
+    timeout = timeout || @runner.timeout
     deadline = Time.instant + timeout
 
     until expected_items.all? { |item| output.includes?(item) } || @completed
@@ -81,8 +183,9 @@ class CommandResult
 
   def expect_status(
     status : Int32,
-    timeout : Time::Span = Testing::DEFAULT_TIMEOUT
+    timeout : Time::Span? = nil
   ) : self
+    timeout = timeout || @runner.timeout
     wait_for_completion(timeout)
     raise "Command ##{@sequence} exited with status #{@status.inspect}, expected #{status}." unless @status == status
 
@@ -91,25 +194,26 @@ class CommandResult
   end
 
   def expect_complete(
-    timeout : Time::Span = Testing::DEFAULT_TIMEOUT
+    timeout : Time::Span? = nil
   ) : self
+    timeout = timeout || @runner.timeout
     wait_for_completion(timeout)
     @runner.expect_command_complete(@sequence, timeout)
     self
   end
 
   def output : String
-    @output.to_s
+    @output
   end
 
   def accept(event : Event) : Nil
     if event.type == "output"
-      @output << event.chunk.not_nil! if event.chunk
+      @output += event.chunk.not_nil! if event.chunk
     elsif event.type == "complete"
       @status = event.status
       @completed = true
-      if output.empty? && (clean = event.clean_output)
-        @output << clean
+      if @output.empty? && (clean = event.clean_output)
+        @output = clean
       end
     end
   end
@@ -127,33 +231,52 @@ end
 def self.run(
   name : String,
   cleanup : Symbol = :never,
+  focus : Bool = true,
   restore_client : Bool = true,
   step_delay : Time::Span = 0.seconds,
+  timeout : Time::Span = DEFAULT_TIMEOUT,
+  start_timeout : Time::Span = START_TIMEOUT,
+  host_stop_timeout : Time::Span = HOST_STOP_TIMEOUT,
   &scenario : Testing ->
 ) : Nil
-  runner = new(name, cleanup, restore_client, step_delay)
+  configuration = Configuration.from_env(
+    name,
+    focus,
+    cleanup,
+    restore_client,
+    step_delay,
+    timeout,
+    start_timeout,
+    host_stop_timeout
+  )
+  runner = new(name, configuration)
   runner.run { yield runner }
 end
 
 def initialize(
   @name : String,
-  @cleanup : Symbol = :never,
-  @restore_client : Bool = true,
-  @step_delay : Time::Span = 0.seconds
+  configuration : Configuration
 )
-  unless @cleanup == :always || @cleanup == :never
-    raise ArgumentError.new("cleanup must be :always or :never, got #{@cleanup.inspect}")
-  end
-
   unless ENV["TMUX"]? && ENV["TMUX_PANE"]?
     raise "Run this smoke test from inside the Tmux session to return to."
   end
+
+  @configuration = configuration
+  @cleanup = configuration.cleanup
+  @focus = configuration.focus
+  @restore_client = configuration.restore_client
+  @step_delay = configuration.step_delay
+  @timeout = configuration.timeout
+  @start_timeout = configuration.start_timeout
+  @host_stop_timeout = configuration.host_stop_timeout
 
   @server = Tmux::Server.from_env
   @origin_session = Tmux::Session.from_env
   @origin_session_name = @origin_session.session_name
   @started_at = Time.utc
 end
+
+getter timeout : Time::Span
 
 def run(&scenario : Testing ->) : Nil
   begin
@@ -198,6 +321,7 @@ def start_cli(
   environment = {} of String => String?
   ENV.each { |key, value| environment[key] = value }
   environment["TMUX_REPL_SESSION"] = nil
+  environment["TMUX_REPL_TEST_FOCUS"] = @focus ? "1" : "0"
 
   stdout = IO::Memory.new
   stderr = IO::Memory.new
@@ -213,7 +337,7 @@ def start_cli(
   end
 
   created : Tmux::Session? = nil
-  found = wait_until(START_TIMEOUT) do
+  found = wait_until(@start_timeout) do
     candidates = @server.sessions.select do |session|
       !existing_session_ids.includes?(session.session_id) &&
         session.session_name.starts_with?("#{@origin_session_name}|repl-")
@@ -231,7 +355,7 @@ def start_cli(
 
   @session_name = created.not_nil!.session_name
   attach_session
-  ensure_foreground!
+  ensure_foreground! if @focus
   self
 end
 
@@ -239,13 +363,14 @@ end
 # application-owned objects. Custom test sessions are always temporary.
 def start_custom(definition : Definition) : self
   raise "A REPL session has already been started." if @session_name
-  raise "start_custom requires cleanup: :always." unless @cleanup == :always
   raise ArgumentError.new("start_custom requires at least one custom command.") unless definition.custom_commands?
   if @server.cmd("has-session", "-t", definition.name).success?
     raise "Tmux session #{definition.name.inspect} already exists."
   end
 
-  definition.start
+  raise "Custom REPL tests require cleanup: :always." unless @cleanup == :always
+
+  definition.start(focus: @focus)
   @definition = definition
   @session_name = definition.name
 
@@ -263,7 +388,7 @@ def start_custom(definition : Definition) : self
   end
 
   attach_session
-  ensure_foreground!
+  ensure_foreground! if @focus
   self
 end
 
@@ -311,9 +436,9 @@ end
 
 def expect_visible(
   *expected : String,
-  timeout : Time::Span = DEFAULT_TIMEOUT
+  timeout : Time::Span? = nil
 ) : Nil
-  expect_visible_items(expected.to_a, timeout)
+  expect_visible_items(expected.to_a, timeout || @timeout)
 end
 
 def expect_visible_items(
@@ -462,11 +587,11 @@ private def pane_text(pane : Tmux::Pane) : String
 end
 
 private def wait_until(
-  timeout : Time::Span = DEFAULT_TIMEOUT,
+  timeout : Time::Span? = nil,
   interval : Time::Span = 25.milliseconds,
   &condition : -> Bool
 ) : Bool
-  deadline = Time.instant + timeout
+  deadline = Time.instant + (timeout || @timeout)
   while Time.instant < deadline
     return true if yield
     sleep interval
@@ -494,11 +619,12 @@ private def finish : Nil
     cleanup_step("Restore Output pane zoom") { restore_output_zoom }
   end
 
-  if @restore_client
+  if @restore_client && @focus
     cleanup_step("Return to original session") { return_to_origin }
   end
 
-  if @cleanup == :always && @session_name
+  should_cleanup = @cleanup == :always || (@cleanup == :on_failure && !@failure.nil?)
+  if should_cleanup && @session_name
     cleanup_step("Clean up REPL session") { cleanup_session }
   end
 end
@@ -567,10 +693,11 @@ private def cleanup_session : Nil
     end
   end
 
-  removed = wait_until(HOST_STOP_TIMEOUT) do
+  removed = wait_until(@host_stop_timeout) do
     !@server.cmd("has-session", "-t", name).success?
   end
   raise "Tmux session #{name.inspect} was not removed." unless removed
+  @session_cleaned = true
 end
 
 private def wait_for_custom_host : Nil
@@ -580,7 +707,7 @@ private def wait_for_custom_host : Nil
   select
   when value = result.receive
     message = value
-  when timeout(HOST_STOP_TIMEOUT)
+  when timeout(@host_stop_timeout)
     raise "Timed out waiting for the custom command host to stop."
   end
 
@@ -606,6 +733,18 @@ private def write_machine_report : String
       json.field "finished_at_unix_ms", finished_at
       json.field "original_session", @origin_session_name
       json.field "smoke_test_session", @session_name
+      json.field "session_cleaned", @session_cleaned
+      json.field "configuration" do
+        json.object do
+          json.field "focus", @focus
+          json.field "cleanup", @cleanup.to_s
+          json.field "restore_client", @restore_client
+          json.field "step_delay_seconds", @step_delay.total_seconds
+          json.field "timeout_seconds", @timeout.total_seconds
+          json.field "start_timeout_seconds", @start_timeout.total_seconds
+          json.field "host_stop_timeout_seconds", @host_stop_timeout.total_seconds
+        end
+      end
       json.field "checks" do
         json.array do
           @report.each do |check|
@@ -644,11 +783,11 @@ private def print_report(machine_report_path : String) : Nil
 
   puts
   if name = @session_name
-    if @cleanup == :never
+    if @session_cleaned
+      puts "The temporary smoke-test session was cleaned up: #{name}"
+    else
       puts "The smoke-test session was left open: #{name}"
       puts "Return to it with: tmux switch-client -t '#{name}'"
-    else
-      puts "The temporary smoke-test session was cleaned up: #{name}"
     end
   else
     puts "No smoke-test session was created."
