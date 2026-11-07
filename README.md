@@ -148,13 +148,44 @@ Use `context.write(chunk)` to stream output as it becomes available, or
 status 127; handler exceptions are displayed in the output pane with exit
 status 1.
 
-A generic fake-backend fixture and its Tmux end-to-end test are available as
-`tmux.repl.custom_repl` and `tmux.repl.custom_repl.test`. Running the fixture
-starts and focuses the Tmux session; the process stays alive while it serves
-commands. The test sets `TMUX_REPL_CUSTOM_REPL_FOCUS=0` so it can inspect the
-panes without switching its controlling client. Run the test from inside the
-Tmux session you want to return to. It exercises output streaming,
-argument parsing, unknown commands, and handler failures without requiring a VM.
+The custom REPL smoke test defines its fixture in the test process and uses the
+same `Definition` object for startup, command handling, and shutdown. It does
+not need a separate fixture executable or a VM.
+
+## Testing REPLs
+
+`TmuxREPL::Testing` provides a scenario runner for interactive and custom REPL
+tests. It owns Tmux session discovery, pane access, key injection, bounded
+waits, cleanup, client restoration, and a common JSON report. Tests describe
+actions and expectations rather than repeating Tmux plumbing.
+
+    require "tmux_repl"
+
+    TmuxREPL::Testing.run("my REPL", cleanup: :always) do |test|
+      test.start_custom(definition)
+
+      test.step("execute the OCR command") do
+        test.submit("ocr").expect_output("SCREEN OCR:").expect_status(0)
+      end
+    end
+
+`start_cli("./bin/tmux.repl", ["start"])` exercises the real CLI.
+`start_custom(definition)` runs a custom definition in the test process, so
+handlers retain access to the same objects as the application. Custom sessions
+require `cleanup: :always`; ordinary smoke tests may use `cleanup: :never` to
+leave the session open for inspection.
+
+`submit` returns a command result. Output and completion expectations are
+correlated with the sequence-numbered LavinMQ event stream, then checked against
+the Output pane. Use `press(:input, "C-Up")`,
+`press(:output, "PageDown")`, `expect_selected_input(1)`,
+`expect_visible(...)`, and `expect_zoomed(true)` for presentation checks.
+`step_delay` is only an optional observation pause; it is not used for
+synchronization.
+
+Both smoke-test executables write the same versioned JSON report under
+`$XDG_STATE_HOME/tmux.repl/smoke-tests` (or
+`$HOME/.local/state/tmux.repl/smoke-tests` when `XDG_STATE_HOME` is unset).
 
 ## Session state
 

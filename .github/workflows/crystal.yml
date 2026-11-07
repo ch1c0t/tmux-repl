@@ -126,22 +126,25 @@ jobs:
           fi
 
           report_dir="${XDG_STATE_HOME:-$HOME/.local/state}/tmux.repl/smoke-tests"
-          report_path="$(find "$report_dir" -maxdepth 1 -type f -name 'smoke-test-*.json' -print -quit)"
-          if [ -z "$report_path" ]; then
-            echo "tmux.repl.test did not produce its JSON report in $report_dir." >&2
+          mapfile -t report_paths < <(find "$report_dir" -maxdepth 1 -type f -name 'smoke-test-*.json' -print | sort)
+          if [ "${#report_paths[@]}" -lt 2 ]; then
+            echo "Expected both smoke-test JSON reports in $report_dir." >&2
+            printf 'Found: %s\n' "${report_paths[@]}"
             exit 1
           fi
 
           ruby -rjson -e '
-            report = JSON.parse(File.read(ARGV.fetch(0)))
-            abort "Unsupported report schema." unless report.fetch("schema_version") == 1
-            abort "Smoke test report is not successful." unless report.fetch("status") == "passed"
-            abort "Smoke test report exit code is not zero." unless report.fetch("exit_code") == 0
-            checks = report.fetch("checks")
-            failed = checks.reject { |check| check.fetch("status") == "passed" }
-            abort "Failed checks: #{failed.map { |check| check.fetch("name") }.join(", ")}" unless failed.empty?
-            puts "Validated #{checks.length} smoke-test checks from #{ARGV.fetch(0)}."
-          ' "$report_path"
+            ARGV.each do |path|
+              report = JSON.parse(File.read(path))
+              abort "Unsupported report schema in #{path}." unless report.fetch("schema_version") == 1
+              abort "Smoke test report is not successful: #{path}." unless report.fetch("status") == "passed"
+              abort "Smoke test report exit code is not zero: #{path}." unless report.fetch("exit_code") == 0
+              checks = report.fetch("checks")
+              failed = checks.reject { |check| check.fetch("status") == "passed" }
+              abort "Failed checks in #{path}: #{failed.map { |check| check.fetch("name") }.join(", ")}" unless failed.empty?
+              puts "Validated #{checks.length} checks from #{path}."
+            end
+          ' "${report_paths[@]}"
 
           exit 0
       - name: Prepare smoke-test report artifact
