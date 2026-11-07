@@ -130,7 +130,7 @@ process, rather than a shell or a separate PTY worker. Handlers receive a
       end
     end
 
-    repl.start(focus: false)
+    repl.start
     repl.serve
 
 `start` subscribes the application process to the session's command stream
