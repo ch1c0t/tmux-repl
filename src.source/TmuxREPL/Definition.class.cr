@@ -6,8 +6,8 @@ getter name : String
 @input_executable : String?
 @output_executable : String?
 @worker_executable : String?
-@handlers : Hash(String, Proc(CommandContext, Array(String), Nil))
-@host : CustomCommandHost?
+@handlers : Hash(String, Proc(CustomREPL::CommandContext, Array(String), Nil))
+@host : CustomREPL::CustomCommandHost?
 
 def initialize(@name : String)
   @command = nil
@@ -16,7 +16,7 @@ def initialize(@name : String)
   @input_executable = nil
   @output_executable = nil
   @worker_executable = nil
-  @handlers = {} of String => Proc(CommandContext, Array(String), Nil)
+  @handlers = {} of String => Proc(CustomREPL::CommandContext, Array(String), Nil)
   @host = nil
 end
 
@@ -34,7 +34,7 @@ end
 # Definition, not in the separate PTY worker.
 def on_command(
   name : String,
-  &handler : CommandContext, Array(String) -> Nil
+  &handler : CustomREPL::CommandContext, Array(String) -> Nil
 ) : self
   raise ArgumentError.new("Cannot register custom commands with a native REPL command") if @command
   unless name.match(/\A[a-zA-Z][a-zA-Z0-9_-]*\z/)
@@ -102,7 +102,7 @@ def start(focus : Bool = true) : Session
 
   repl_session = session
   if custom_commands?
-    @host = CustomCommandHost.new(@name, @handlers.dup)
+    @host = CustomREPL::CustomCommandHost.new(@name, repl_session.state.base_path, @handlers.dup)
     @host.not_nil!.start
   end
 

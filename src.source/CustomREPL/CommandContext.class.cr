@@ -12,7 +12,7 @@ def write(chunk : String) : Nil
   return if chunk.empty?
 
   @output << chunk
-  TmuxREPL.publish_event(
+  Protocol.publish_event(
     @events,
     "output",
     @session_name,

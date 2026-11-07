@@ -37,7 +37,10 @@ definition = TmuxREPL.define(session_name) do |repl|
 end
 
 begin
-  definition.start(focus: false)
+  # Interactive use should enter the new Tmux session. The end-to-end test
+  # explicitly opts out so it can inspect the panes from its controlling client.
+  focus = ENV["TMUX_REPL_CUSTOM_REPL_FOCUS"]? != "0"
+  definition.start(focus: focus)
   definition.serve
 rescue ex
   STDERR.puts "tmux.repl.custom_repl: #{ex.class}: #{ex.message}"

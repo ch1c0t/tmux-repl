@@ -5,3 +5,4 @@ json
 tmux
 global-amqp_channel
 queue
+./custom_repl

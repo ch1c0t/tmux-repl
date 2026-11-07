@@ -2,6 +2,7 @@
 
 def initialize(
   @session_name : String,
+  @state_path : String,
   @handlers : Hash(String, Proc(CommandContext, Array(String), Nil))
 )
   @shutdown = Channel(Nil).new(1)
@@ -15,13 +16,13 @@ def start : Nil
   channel = Global.amqp_channel
   channel.prefetch(1)
 
-  commands = TmuxREPL.stream_queue(
+  commands = Protocol.stream_queue(
     channel,
-    TmuxREPL.commands_queue_name(@session_name)
+    Protocol.commands_queue_name(@session_name)
   )
-  @events = TmuxREPL.stream_queue(
+  @events = Protocol.stream_queue(
     channel,
-    TmuxREPL.events_queue_name(@session_name)
+    Protocol.events_queue_name(@session_name)
   )
 
   commands.subscribe(
@@ -78,14 +79,14 @@ private def process_message(data : JSON::Any) : Nil
 
   events = @events || raise "Custom command host has not been started."
   received_at = Time.instant
-  TmuxREPL.trace_timing(
+  Protocol.trace_timing(
     @session_name,
-    "custom",
+    @state_path,
     "command_received",
     details: "sequence=#{sequence} command_bytes=#{command.bytesize}"
   )
 
-  TmuxREPL.publish_event(events, "started", @session_name, sequence, command: command)
+  Protocol.publish_event(events, "started", @session_name, sequence, command: command)
   context = CommandContext.new(@session_name, sequence, events)
   status = 0
 
@@ -105,7 +106,7 @@ private def process_message(data : JSON::Any) : Nil
     status = 1
   end
 
-  TmuxREPL.publish_event(
+  Protocol.publish_event(
     events,
     "complete",
     @session_name,
@@ -114,9 +115,9 @@ private def process_message(data : JSON::Any) : Nil
     status: status,
     clean_output: context.output
   )
-  TmuxREPL.trace_timing(
+  Protocol.trace_timing(
     @session_name,
-    "custom",
+    @state_path,
     "command_processing_finished",
     received_at,
     "sequence=#{sequence} status=#{status}"

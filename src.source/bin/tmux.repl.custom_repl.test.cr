@@ -61,6 +61,7 @@ class CustomREPLSmokeTest
     environment = {} of String => String?
     ENV.each { |key, value| environment[key] = value }
     environment["TMUX_REPL_SESSION"] = @session_name
+    environment["TMUX_REPL_CUSTOM_REPL_FOCUS"] = "0"
 
     @process = Process.new(
       executable,

@@ -53,7 +53,8 @@ definition = TmuxREPL.define(session_name) do |repl|
 end
 
 begin
-  definition.start(focus: false)
+  focus = ENV["TMUX_REPL_CUSTOM_REPL_FOCUS"]? != "0"
+  definition.start(focus: focus)
   definition.serve
 rescue ex
   STDERR.puts "tmux.repl.custom_repl: #{ex.class}: #{ex.message}"
