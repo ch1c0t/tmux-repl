@@ -1,4 +1,3 @@
-class SmokeTest
   TIMEOUT = 8.seconds
 
   @server : Tmux::Server
@@ -214,4 +213,3 @@ class SmokeTest
     end
   rescue
   end
-end
