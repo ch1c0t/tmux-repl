@@ -171,6 +171,19 @@ end
 private def cleanup : Nil
   errors = [] of String
 
+  # Switch back while the custom session still exists. Killing the session
+  # while it is active can detach the client before it can be restored.
+  begin
+    @origin_session.switch_client
+    restored = wait_until { current_client_session_name == @origin_session_name }
+    raise "The Tmux client did not return to #{@origin_session_name.inspect}." unless restored
+
+    @checks += 1
+    puts "PASS  Return to original session #{@origin_session_name}"
+  rescue ex
+    errors << "Could not return to original Tmux session: #{ex.message}"
+  end
+
   begin
     if @server.cmd("has-session", "-t", @session_name).success?
       result = @server.cmd("kill-session", "-t", @session_name)
@@ -191,17 +204,6 @@ private def cleanup : Nil
     rescue ex
       errors << "Could not wait for custom REPL host: #{ex.message}"
     end
-  end
-
-  begin
-    @origin_session.switch_client
-    restored = wait_until { current_client_session_name == @origin_session_name }
-    raise "The Tmux client did not return to #{@origin_session_name.inspect}." unless restored
-
-    @checks += 1
-    puts "PASS  Return to original session #{@origin_session_name}"
-  rescue ex
-    errors << "Could not return to original Tmux session: #{ex.message}"
   end
 
   raise errors.join("\n") unless errors.empty?
