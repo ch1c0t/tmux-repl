@@ -192,6 +192,27 @@ by the same runner used by the block-based API.
       cleanup: :always
     )
 
+A `Testing::Suite` composes scenario classes into one sequential run:
+
+    suite = TmuxREPL::Testing::Suite.new("integration")
+    suite.add(StandardREPLScenario, name: "standard", cleanup: :never)
+    suite.add(MyCustomREPLScenario, name: "custom", cleanup: :always)
+
+    report = suite.run
+    exit report.exit_code
+
+Scenarios are explicitly registered and run in registration order. By default,
+a failed scenario is recorded and the suite continues. Pass `fail_fast: true`
+to the suite constructor to mark all remaining scenarios as skipped after the
+first failure. Scenario names must be unique within a suite.
+
+Each scenario still uses the regular `Testing` lifecycle and writes its own
+JSON report. The suite returns a report with each scenario's status, duration,
+and individual report path, and writes an aggregate JSON report alongside the
+scenario reports. Use `report.success?` or `report.exit_code` to determine the
+overall result. Suite execution is sequential by design; it does not discover
+scenario subclasses or run Tmux sessions concurrently.
+
 `start_cli("./bin/tmux.repl", ["start"])` exercises the standard CLI.
 `start_host(executable, arguments, session_name)` launches a long-running
 custom application as a child process, waits for that exact Tmux session and
