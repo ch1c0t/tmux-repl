@@ -53,7 +53,7 @@ def with_suite_state(&block : String -> T) : T forall T
     yield directory
   end
 ensure
-  FileUtils.rm_rf(directory)
+  FileUtils.rm_rf(directory) if directory
 end
 
 describe TmuxREPL::Testing::Suite do
