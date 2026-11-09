@@ -1030,6 +1030,12 @@ abstract class Scenario < Testing
   def run_steps : Nil
   end
 
+  macro inherited
+    def run_steps : Nil
+      super
+    end
+  end
+
   macro step(name, &block)
     def run_steps : Nil
       previous_def
