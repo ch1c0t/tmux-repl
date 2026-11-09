@@ -1833,6 +1833,31 @@ module TmuxREPL
       runner = new(name, configuration)
       runner.run { yield runner }
     end
+
+    def self.run(
+      scenario_class : T.class,
+      name : String,
+      cleanup : Symbol = :never,
+      focus : Bool = true,
+      restore_client : Bool = true,
+      step_delay : Time::Span = 0.seconds,
+      timeout : Time::Span = DEFAULT_TIMEOUT,
+      start_timeout : Time::Span = START_TIMEOUT,
+      host_stop_timeout : Time::Span = HOST_STOP_TIMEOUT
+    ) : Nil forall T
+      configuration = Configuration.from_env(
+        name,
+        focus,
+        cleanup,
+        restore_client,
+        step_delay,
+        timeout,
+        start_timeout,
+        host_stop_timeout
+      )
+      scenario = scenario_class.new(name, configuration)
+      scenario.run { scenario.execute_steps }
+    end
     
     def initialize(
       @name : String,
@@ -2030,9 +2055,13 @@ module TmuxREPL
     end
     
     def step(name : String, &block : -> T) : Nil forall T
+      record_step(name) { yield }
+    end
+
+    private def record_step(name : String, &block : -> T) : Nil forall T
       started_at = Time.instant
       @stage = name
-    
+
       begin
         yield
         @report << {
@@ -2567,6 +2596,24 @@ module TmuxREPL
         puts "No smoke-test session was created."
       end
       puts "Machine-readable report: #{machine_report_path}"
+    end
+
+    abstract class Scenario < Testing
+      def execute_steps : Nil
+        run_steps
+      end
+
+      def run_steps : Nil
+      end
+
+      macro step(name, &block)
+        def run_steps : Nil
+          previous_def
+          record_step({{name}}) do
+            {{block.body}}
+          end
+        end
+      end
     end
   end
 end

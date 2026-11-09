@@ -163,24 +163,34 @@ Run the fixture with:
 
 `TmuxREPL::Testing` provides a scenario runner for interactive and custom REPL
 tests. It owns Tmux session discovery, pane access, key injection, bounded
-waits, cleanup, client restoration, and a common JSON report. Tests describe
-actions and expectations rather than repeating Tmux plumbing.
+waits, cleanup, client restoration, and a common JSON report. A
+`Testing::Scenario` subclass declares named steps with the class-level `step`
+macro. The steps execute in declaration order on the scenario instance, which
+inherits the runner's public testing helpers. Each step is timed and reported
+by the same runner used by the block-based API.
 
     require "tmux_repl"
 
-    session_name = "my-custom-repl-#{Process.pid}"
+    class MyCustomREPLScenario < TmuxREPL::Testing::Scenario
+      step "start the custom REPL" do
+        session_name = "my-custom-repl-#{Process.pid}"
+        start_host(
+          "./bin/my-custom-repl",
+          ["start", session_name],
+          session_name
+        )
+      end
 
-    TmuxREPL::Testing.run("my REPL", cleanup: :always) do |test|
-      test.start_host(
-        "./bin/my-custom-repl",
-        ["start", session_name],
-        session_name
-      )
-
-      test.step("execute the OCR command") do
-        test.submit("ocr").expect_output("SCREEN OCR:").expect_status(0)
+      step "execute the OCR command" do
+        submit("ocr").expect_output("SCREEN OCR:").expect_status(0)
       end
     end
+
+    TmuxREPL::Testing.run(
+      MyCustomREPLScenario,
+      name: "my-custom-repl",
+      cleanup: :always
+    )
 
 `start_cli("./bin/tmux.repl", ["start"])` exercises the standard CLI.
 `start_host(executable, arguments, session_name)` launches a long-running
@@ -190,7 +200,8 @@ both frontend readiness markers, and captures its output in a host log.
 The custom smoke test uses `start_host`, so command handlers are owned by a
 separate application process rather than the test runner. Custom test sessions
 must always be cleaned up; standard REPL sessions can be left open for
-inspection.
+inspection. The block-based `Testing.run("name") { |test| ... }` API remains
+available for ad-hoc tests that do not need a reusable scenario class.
 
 When the runner is configured with `focus=0`, it passes `--no-focus` to the
 CLI instead of exporting a test-only environment variable into the application
