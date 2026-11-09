@@ -117,4 +117,13 @@ describe TmuxREPL::Testing::Scenario do
     ])
   end
 
+  it "keeps step execution state isolated between instances" do
+    first = ChildScenarioStepFixture.allocate.prepare_for_test
+    second = ChildScenarioStepFixture.allocate.prepare_for_test
+
+    first.execute_steps
+
+    first.executed_steps.size.should eq(4)
+    second.executed_steps.should be_empty
+  end
 end
