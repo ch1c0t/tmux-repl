@@ -537,6 +537,40 @@ def expect_zoomed(expected : Bool) : Nil
   raise "Expected Output pane zoomed=#{expected}, got #{actual}."
 end
 
+def select_pane(pane : Symbol) : Nil
+  target = case pane
+           when :input
+             input_pane
+           when :output
+             output_pane
+           else
+             raise ArgumentError.new("pane must be :input or :output, got #{pane.inspect}")
+           end
+  target.select
+end
+
+def expect_active_pane(pane : Symbol) : Nil
+  target = case pane
+           when :input
+             input_pane
+           when :output
+             output_pane
+           else
+             raise ArgumentError.new("pane must be :input or :output, got #{pane.inspect}")
+           end
+
+  return if wait_until { target.active? }
+
+  actual = if input_pane.active?
+    :input
+  elsif output_pane.active?
+    :output
+  else
+    :none
+  end
+  raise "Expected #{pane} pane to be active, got #{actual}."
+end
+
 def receive_command_event(result : CommandResult, timeout : Time::Span) : Nil
   events = @event_channel || raise "The REPL event consumer has not started."
 

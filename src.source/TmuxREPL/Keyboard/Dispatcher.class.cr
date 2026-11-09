@@ -117,7 +117,10 @@ private def dispatch(press : KeyPress) : Nil
              end
            when Action::ToggleOutputZoom
              begin
-               TmuxREPL.publish_event(@events, "toggle_output_zoom", @session_name, 0_u64)
+               TmuxREPL.publish_event(
+                 @events, "toggle_output_zoom", @session_name, 0_u64,
+                 requesting_pane: ENV["TMUX_PANE"]?
+               )
                "published"
              rescue ex
                STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"

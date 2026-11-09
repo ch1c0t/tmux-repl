@@ -9,7 +9,7 @@ private def handle_message(
     event_received_at = Time.instant if TmuxREPL.trace_timing_enabled?
 
     if event_type == "toggle_output_zoom"
-      toggle_output_zoom(view)
+      toggle_output_zoom(view, data)
     else
       view.update(data)
 
@@ -39,9 +39,23 @@ private def handle_message(
 end
 
 
-private def toggle_output_zoom(view : View) : Nil
+# Alt+Z always zooms the Output pane. Remember the pane that requested the
+# zoom so the second Alt+Z restores focus after removing the zoom.
+private def toggle_output_zoom(view : View, data : JSON::Any) : Nil
   pane = Tmux::Pane.from_env
-  pane.select
-  pane.run!("resize-pane", "-Z", "-t", pane.pane_id)
+  zoomed = pane.display_message("\#{window_zoomed_flag}") == "1"
+
+  if zoomed
+    pane.run!("resize-pane", "-Z", "-t", pane.pane_id)
+    if return_pane_id = @zoom_return_pane_id
+      pane.run!("select-pane", "-t", return_pane_id)
+    end
+    @zoom_return_pane_id = nil
+  else
+    @zoom_return_pane_id = data["requesting_pane"]?.try(&.as_s)
+    pane.select
+    pane.run!("resize-pane", "-Z", "-t", pane.pane_id)
+  end
+
   view.render
 end

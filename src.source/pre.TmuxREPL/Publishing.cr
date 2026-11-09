@@ -7,7 +7,8 @@ def publish_message(
   chunk : String? = nil,
   status : Int32? = nil,
   clean_output : String? = nil,
-  action : String? = nil
+  action : String? = nil,
+  requesting_pane : String? = nil
 ) : Nil
   payload = JSON.build do |json|
     json.object do
@@ -20,6 +21,7 @@ def publish_message(
       json.field "status", status if status
       json.field "clean_output", clean_output if clean_output
       json.field "action", action if action
+      json.field "requesting_pane", requesting_pane if requesting_pane
     end
   end
   properties = AMQP::Client::Properties.new(delivery_mode: 2)
@@ -35,9 +37,10 @@ def publish_event(
   chunk : String? = nil,
   status : Int32? = nil,
   clean_output : String? = nil,
-  action : String? = nil
+  action : String? = nil,
+  requesting_pane : String? = nil
 ) : Nil
-  publish_message(queue, type, session_name, sequence, command, chunk, status, clean_output, action)
+  publish_message(queue, type, session_name, sequence, command, chunk, status, clean_output, action, requesting_pane)
 end
 
 def publish_command(
