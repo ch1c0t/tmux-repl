@@ -70,3 +70,51 @@ describe TmuxREPL::Testing::Configuration do
     end
   end
 end
+
+
+# Lightweight scenarios exercise the macro-generated step chain without
+# creating a Tmux session or starting the interactive testing lifecycle.
+abstract class ScenarioStepChainFixture < TmuxREPL::Testing::Scenario
+  @executed_steps = [] of String
+
+  getter executed_steps : Array(String)
+
+  # Bypass Testing#initialize: these unit tests need no Tmux resources.
+  def prepare_for_test : self
+    @executed_steps = [] of String
+    self
+  end
+
+  private def record_step(name : String, &block : -> T) : Nil forall T
+    @executed_steps << name
+    yield
+  end
+end
+
+class ParentScenarioStepFixture < ScenarioStepChainFixture
+  step "parent step" do
+    executed_steps << "parent body"
+  end
+end
+
+class ChildScenarioStepFixture < ParentScenarioStepFixture
+  step "child step" do
+    executed_steps << "child body"
+  end
+end
+
+describe TmuxREPL::Testing::Scenario do
+  it "executes inherited and local steps in declaration order" do
+    scenario = ChildScenarioStepFixture.allocate.prepare_for_test
+
+    scenario.execute_steps
+
+    scenario.executed_steps.should eq([
+      "parent step",
+      "parent body",
+      "child step",
+      "child body",
+    ])
+  end
+
+end
