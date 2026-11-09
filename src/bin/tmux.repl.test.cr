@@ -141,23 +141,29 @@ begin
     end
 
     test.step("Alt+Z from Input zooms Output") do
+      test.select_pane(:input)
       test.press(:input, "M-z")
       test.expect_zoomed(true)
+      test.expect_active_pane(:output)
     end
 
-    test.step("Alt+Z from Output restores the split") do
+    test.step("Alt+Z from Output restores the split and Input focus") do
       test.press(:output, "M-z")
       test.expect_zoomed(false)
+      test.expect_active_pane(:input)
     end
 
     test.step("Alt+Z from Output zooms Output") do
+      test.select_pane(:output)
       test.press(:output, "M-z")
       test.expect_zoomed(true)
+      test.expect_active_pane(:output)
     end
 
-    test.step("Alt+Z from Input restores the split") do
-      test.press(:input, "M-z")
+    test.step("Alt+Z from Output restores the split and Output focus") do
+      test.press(:output, "M-z")
       test.expect_zoomed(false)
+      test.expect_active_pane(:output)
     end
 
     test.step("Leave the smoke-test session running") do
