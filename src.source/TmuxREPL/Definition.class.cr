@@ -131,8 +131,11 @@ def serve : Nil
   begin
     host.wait
   ensure
-    host.stop
-    @host = nil
+    begin
+      host.stop
+    ensure
+      @host = nil
+    end
   end
 end
 
