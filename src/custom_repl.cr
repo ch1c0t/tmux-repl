@@ -101,8 +101,7 @@ module CustomREPL
     @commands : AMQP::Client::Queue?
     @consumer_tag : String?
     @state_mutex : Mutex
-    @processing_finished : Channel(Nil)
-    @processing = false
+    @processing_finished : Channel(Nil)?
     
     def initialize(
       @session_name : String,
@@ -115,7 +114,7 @@ module CustomREPL
       @commands = nil
       @consumer_tag = nil
       @state_mutex = Mutex.new
-      @processing_finished = Channel(Nil).new(1)
+      @processing_finished = nil
     end
     
     # Connect before the input pane is started so its first command cannot race
@@ -142,11 +141,12 @@ module CustomREPL
           {"x-stream-offset" => "next"} of String => AMQ::Protocol::Field
         )
       ) do |message|
+        finished = Channel(Nil).new(1)
         accepted = @state_mutex.synchronize do
           if @stopped
             false
           else
-            @processing = true
+            @processing_finished = finished
             true
           end
         end
@@ -165,12 +165,12 @@ module CustomREPL
             end
           end
         ensure
-          @state_mutex.synchronize { @processing = false }
           select
-          when @processing_finished.send(nil)
+          when finished.send(nil)
           else
             nil
           end
+          @state_mutex.synchronize { @processing_finished = nil }
         end
       end
     rescue ex
@@ -210,7 +210,7 @@ module CustomREPL
       end
       return unless should_stop
     
-      processing = @state_mutex.synchronize { @processing }
+      processing_finished = @state_mutex.synchronize { @processing_finished }
     
       begin
         if commands = @commands
@@ -221,7 +221,7 @@ module CustomREPL
         end
       ensure
         begin
-          @processing_finished.receive if processing
+          processing_finished.try &.receive
         ensure
           select
           when @shutdown.send(nil)
