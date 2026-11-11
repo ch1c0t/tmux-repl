@@ -8,6 +8,7 @@ getter name : String
 @worker_executable : String?
 @handlers : Hash(String, Proc(CustomREPL::CommandContext, Array(String), Nil))
 @host : CustomREPL::CustomCommandHost?
+@started_session : Session?
 
 def initialize(@name : String)
   @command = nil
@@ -18,6 +19,7 @@ def initialize(@name : String)
   @worker_executable = nil
   @handlers = {} of String => Proc(CustomREPL::CommandContext, Array(String), Nil)
   @host = nil
+  @started_session = nil
 end
 
 # Configure a native interactive program for this REPL.
@@ -98,9 +100,10 @@ def session : Session
 end
 
 def start(focus : Bool = true) : Session
-  raise "Custom REPL is already started" if @host
+  raise "REPL is already started" if @started_session || @host
 
   repl_session = session
+  @started_session = repl_session
   if custom_commands?
     @host = CustomREPL::CustomCommandHost.new(@name, repl_session.state.base_path, @handlers.dup)
     @host.not_nil!.start
@@ -109,8 +112,15 @@ def start(focus : Bool = true) : Session
   repl_session.start(focus)
   repl_session
 rescue ex
-  @host.try &.stop
+  host = @host
   @host = nil
+  started_session = @started_session
+  @started_session = nil
+  begin
+    host.try &.stop
+  ensure
+    started_session.try &.stop
+  end
   raise ex
 end
 
@@ -121,13 +131,26 @@ def serve : Nil
   begin
     host.wait
   ensure
+    host.stop
     @host = nil
   end
 end
 
 def stop : Nil
-  @host.try &.stop
-  session.stop
+  host = @host
+  @host = nil
+  started_session = @started_session
+  @started_session = nil
+
+  begin
+    host.try &.stop
+  ensure
+    if repl_session = started_session
+      repl_session.stop
+    else
+      session.stop
+    end
+  end
 end
 
 private def configure_command(arguments : Array(String)) : self
