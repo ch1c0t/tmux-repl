@@ -1,4 +1,6 @@
 @events : AMQP::Client::Queue?
+@commands : AMQP::Client::Queue?
+@consumer_tag : String?
 
 def initialize(
   @session_name : String,
@@ -8,15 +10,19 @@ def initialize(
   @shutdown = Channel(Nil).new(1)
   @stopped = false
   @events = nil
+  @commands = nil
+  @consumer_tag = nil
 end
 
 # Connect before the input pane is started so its first command cannot race
 # the stream consumer's subscription.
 def start : Nil
+  raise "Custom command host is already started" if @commands
+
   channel = Global.amqp_channel
   channel.prefetch(1)
 
-  commands = Protocol.stream_queue(
+  @commands = Protocol.stream_queue(
     channel,
     Protocol.commands_queue_name(@session_name)
   )
@@ -25,7 +31,7 @@ def start : Nil
     Protocol.events_queue_name(@session_name)
   )
 
-  commands.subscribe(
+  @consumer_tag = @commands.not_nil!.subscribe(
     no_ack: false,
     block: false,
     args: AMQ::Protocol::Table.new(
@@ -44,6 +50,9 @@ def start : Nil
       end
     end
   end
+rescue ex
+  stop
+  raise ex
 end
 
 # Keep the application process alive while its custom Tmux session exists.
@@ -62,13 +71,29 @@ def wait : Nil
     end
   end
 ensure
-  @stopped = true
+  stop
 end
 
+# Cancel the stream consumer and wake wait, including when Tmux closes the
+# session before the application asks the host to stop explicitly.
 def stop : Nil
   return if @stopped
 
-  @shutdown.send(nil)
+  @stopped = true
+  begin
+    if commands = @commands
+      if consumer_tag = @consumer_tag
+        @consumer_tag = nil
+        commands.unsubscribe(consumer_tag)
+      end
+    end
+  ensure
+    select
+    when @shutdown.send(nil)
+    else
+      nil
+    end
+  end
 end
 
 private def process_message(data : JSON::Any) : Nil
