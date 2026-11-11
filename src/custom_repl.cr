@@ -1,4 +1,5 @@
 require "file_utils"
+require "mutex"
 require "json"
 require "global-amqp_channel"
 require "tmux"
@@ -99,6 +100,9 @@ module CustomREPL
     @events : AMQP::Client::Queue?
     @commands : AMQP::Client::Queue?
     @consumer_tag : String?
+    @state_mutex : Mutex
+    @processing_finished : Channel(Nil)
+    @processing = false
     
     def initialize(
       @session_name : String,
@@ -110,6 +114,8 @@ module CustomREPL
       @events = nil
       @commands = nil
       @consumer_tag = nil
+      @state_mutex = Mutex.new
+      @processing_finished = Channel(Nil).new(1)
     end
     
     # Connect before the input pane is started so its first command cannot race
@@ -136,15 +142,34 @@ module CustomREPL
           {"x-stream-offset" => "next"} of String => AMQ::Protocol::Field
         )
       ) do |message|
+        accepted = @state_mutex.synchronize do
+          if @stopped
+            false
+          else
+            @processing = true
+            true
+          end
+        end
+        next unless accepted
+    
         begin
-          data = JSON.parse(message.body_io.to_s)
-          process_message(data) if data["type"].as_s == "command"
-          message.ack
-        rescue ex
-          STDERR.puts "tmux.repl custom host: command failed: #{ex.class}: #{ex.message}"
           begin
-            message.reject(requeue: false)
-          rescue
+            data = JSON.parse(message.body_io.to_s)
+            process_message(data) if data["type"].as_s == "command"
+            message.ack
+          rescue ex
+            STDERR.puts "tmux.repl custom host: command failed: #{ex.class}: #{ex.message}"
+            begin
+              message.reject(requeue: false)
+            rescue
+            end
+          end
+        ensure
+          @state_mutex.synchronize { @processing = false }
+          select
+          when @processing_finished.send(nil)
+          else
+            nil
           end
         end
       end
@@ -175,25 +200,37 @@ module CustomREPL
     # Cancel the stream consumer and wake wait, including when Tmux closes the
     # session before the application asks the host to stop explicitly.
     def stop : Nil
-      return if @stopped
+      should_stop = @state_mutex.synchronize do
+        if @stopped
+          false
+        else
+          @stopped = true
+          true
+        end
+      end
+      return unless should_stop
     
-      @stopped = true
+      processing = @state_mutex.synchronize { @processing }
+    
       begin
         if commands = @commands
           if consumer_tag = @consumer_tag
-            @consumer_tag = nil
             commands.unsubscribe(consumer_tag)
+            @consumer_tag = nil
           end
         end
       ensure
-        select
-        when @shutdown.send(nil)
-        else
-          nil
+        begin
+          @processing_finished.receive if processing
+        ensure
+          select
+          when @shutdown.send(nil)
+          else
+            nil
+          end
         end
       end
     end
-    
     private def process_message(data : JSON::Any) : Nil
       sequence = data["sequence"].as_i64.to_u64
       command = data["command"].as_s
