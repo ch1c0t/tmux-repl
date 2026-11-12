@@ -1,4 +1,8 @@
 @events : AMQP::Client::Queue?
+@commands : AMQP::Client::Queue?
+@consumer_tag : String?
+@state_mutex : Mutex
+@processing_finished : Channel(Nil)?
 
 def initialize(
   @session_name : String,
@@ -8,15 +12,21 @@ def initialize(
   @shutdown = Channel(Nil).new(1)
   @stopped = false
   @events = nil
+  @commands = nil
+  @consumer_tag = nil
+  @state_mutex = Mutex.new
+  @processing_finished = nil
 end
 
 # Connect before the input pane is started so its first command cannot race
 # the stream consumer's subscription.
 def start : Nil
+  raise "Custom command host is already started" if @commands
+
   channel = Global.amqp_channel
   channel.prefetch(1)
 
-  commands = Protocol.stream_queue(
+  @commands = Protocol.stream_queue(
     channel,
     Protocol.commands_queue_name(@session_name)
   )
@@ -25,25 +35,48 @@ def start : Nil
     Protocol.events_queue_name(@session_name)
   )
 
-  commands.subscribe(
+  @consumer_tag = @commands.not_nil!.subscribe(
     no_ack: false,
     block: false,
     args: AMQ::Protocol::Table.new(
       {"x-stream-offset" => "next"} of String => AMQ::Protocol::Field
     )
   ) do |message|
-    begin
-      data = JSON.parse(message.body_io.to_s)
-      process_message(data) if data["type"].as_s == "command"
-      message.ack
-    rescue ex
-      STDERR.puts "tmux.repl custom host: command failed: #{ex.class}: #{ex.message}"
-      begin
-        message.reject(requeue: false)
-      rescue
+    finished = Channel(Nil).new(1)
+    accepted = @state_mutex.synchronize do
+      if @stopped
+        false
+      else
+        @processing_finished = finished
+        true
       end
     end
+    next unless accepted
+
+    begin
+      begin
+        data = JSON.parse(message.body_io.to_s)
+        process_message(data) if data["type"].as_s == "command"
+        message.ack
+      rescue ex
+        STDERR.puts "tmux.repl custom host: command failed: #{ex.class}: #{ex.message}"
+        begin
+          message.reject(requeue: false)
+        rescue
+        end
+      end
+    ensure
+      select
+      when finished.send(nil)
+      else
+        nil
+      end
+      @state_mutex.synchronize { @processing_finished = nil }
+    end
   end
+rescue ex
+  stop
+  raise ex
 end
 
 # Keep the application process alive while its custom Tmux session exists.
@@ -62,15 +95,43 @@ def wait : Nil
     end
   end
 ensure
-  @stopped = true
+  stop
 end
 
+# Cancel the stream consumer and wake wait, including when Tmux closes the
+# session before the application asks the host to stop explicitly.
 def stop : Nil
-  return if @stopped
+  should_stop = @state_mutex.synchronize do
+    if @stopped
+      false
+    else
+      @stopped = true
+      true
+    end
+  end
+  return unless should_stop
 
-  @shutdown.send(nil)
+  processing_finished = @state_mutex.synchronize { @processing_finished }
+
+  begin
+    if commands = @commands
+      if consumer_tag = @consumer_tag
+        commands.unsubscribe(consumer_tag)
+        @consumer_tag = nil
+      end
+    end
+  ensure
+    begin
+      processing_finished.try &.receive
+    ensure
+      select
+      when @shutdown.send(nil)
+      else
+        nil
+      end
+    end
+  end
 end
-
 private def process_message(data : JSON::Any) : Nil
   sequence = data["sequence"].as_i64.to_u64
   command = data["command"].as_s

@@ -135,6 +135,7 @@ module TmuxREPL
     @worker_executable : String?
     @handlers : Hash(String, Proc(CustomREPL::CommandContext, Array(String), Nil))
     @host : CustomREPL::CustomCommandHost?
+    @started_session : Session?
     
     def initialize(@name : String)
       @command = nil
@@ -145,6 +146,7 @@ module TmuxREPL
       @worker_executable = nil
       @handlers = {} of String => Proc(CustomREPL::CommandContext, Array(String), Nil)
       @host = nil
+      @started_session = nil
     end
     
     # Configure a native interactive program for this REPL.
@@ -225,9 +227,10 @@ module TmuxREPL
     end
     
     def start(focus : Bool = true) : Session
-      raise "Custom REPL is already started" if @host
+      raise "REPL is already started" if @started_session || @host
     
       repl_session = session
+      @started_session = repl_session
       if custom_commands?
         @host = CustomREPL::CustomCommandHost.new(@name, repl_session.state.base_path, @handlers.dup)
         @host.not_nil!.start
@@ -236,8 +239,15 @@ module TmuxREPL
       repl_session.start(focus)
       repl_session
     rescue ex
-      @host.try &.stop
+      host = @host
       @host = nil
+      started_session = @started_session
+      @started_session = nil
+      begin
+        host.try &.stop
+      ensure
+        started_session.try &.stop
+      end
       raise ex
     end
     
@@ -248,13 +258,29 @@ module TmuxREPL
       begin
         host.wait
       ensure
-        @host = nil
+        begin
+          host.stop
+        ensure
+          @host = nil
+        end
       end
     end
     
     def stop : Nil
-      @host.try &.stop
-      session.stop
+      host = @host
+      @host = nil
+      started_session = @started_session
+      @started_session = nil
+    
+      begin
+        host.try &.stop
+      ensure
+        if repl_session = started_session
+          repl_session.stop
+        else
+          session.stop
+        end
+      end
     end
     
     private def configure_command(arguments : Array(String)) : self
@@ -1574,7 +1600,6 @@ module TmuxREPL
   end
 
   class Testing
-
     struct Configuration
       getter focus : Bool
       getter cleanup : Symbol
@@ -1583,7 +1608,7 @@ module TmuxREPL
       getter timeout : Time::Span
       getter start_timeout : Time::Span
       getter host_stop_timeout : Time::Span
-
+      
       def initialize(
         @focus : Bool,
         @cleanup : Symbol,
@@ -1596,12 +1621,12 @@ module TmuxREPL
         unless @cleanup == :always || @cleanup == :never || @cleanup == :on_failure
           raise ArgumentError.new("cleanup must be always, never, or on_failure; got #{@cleanup.inspect}")
         end
-
+      
         if @focus && @cleanup != :never && !@restore_client
           raise ArgumentError.new("restore_client must be enabled when a focused test session may be cleaned up")
         end
       end
-
+      
       def self.from_env(
         name : String,
         focus : Bool,
@@ -1622,20 +1647,20 @@ module TmuxREPL
           duration(name, "HOST_STOP_TIMEOUT", host_stop_timeout)
         )
       end
-
+      
       private def self.environment_value(name : String, setting : String) : String?
         scenario = (name.split('.').last? || name).gsub(/[^a-zA-Z0-9]/, "_").upcase
         full_name = name.gsub(/[^a-zA-Z0-9]/, "_").upcase
-
+      
         ENV["TMUX_REPL_TEST_#{scenario}_#{setting}"]? ||
           ENV["TMUX_REPL_TEST_#{full_name}_#{setting}"]? ||
           ENV["TMUX_REPL_TEST_#{setting}"]?
       end
-
+      
       private def self.boolean(name : String, setting : String, default : Bool) : Bool
         value = environment_value(name, setting)
         return default unless value
-
+      
         case value.downcase
         when "1", "true", "yes", "on"
           true
@@ -1645,11 +1670,11 @@ module TmuxREPL
           raise ArgumentError.new("Invalid boolean for TMUX_REPL_TEST_#{setting}: #{value.inspect}")
         end
       end
-
+      
       private def self.cleanup_policy(name : String, default : Symbol) : Symbol
         value = environment_value(name, "CLEANUP")
         return default unless value
-
+      
         case value.downcase
         when "always"
           :always
@@ -1661,27 +1686,27 @@ module TmuxREPL
           raise ArgumentError.new("Invalid cleanup policy for TMUX_REPL_TEST_CLEANUP: #{value.inspect}")
         end
       end
-
+      
       private def self.duration(name : String, setting : String, default : Time::Span) : Time::Span
         value = environment_value(name, setting)
         return default unless value
-
+      
         seconds = value.to_f?
         unless seconds && seconds >= 0
           raise ArgumentError.new("Expected non-negative seconds for TMUX_REPL_TEST_#{setting}, got #{value.inspect}")
         end
-
+      
         seconds.seconds
       end
     end
-
+  
     struct Event
       getter type : String
       getter sequence : Int64
       getter chunk : String?
       getter status : Int32?
       getter clean_output : String?
-
+      
       def initialize(
         @type : String,
         @sequence : Int64,
@@ -1691,15 +1716,15 @@ module TmuxREPL
       )
       end
     end
-
+  
     class CommandResult
       getter sequence : Int32
       getter command : String
       getter status : Int32?
-
+      
       @output = ""
       @completed = false
-
+      
       def initialize(
         @runner : Testing,
         @sequence : Int32,
@@ -1707,7 +1732,7 @@ module TmuxREPL
       )
         @status = nil
       end
-
+      
       # Wait for protocol output first, then verify that the Output pane rendered it.
       def expect_output(
         *expected : String,
@@ -1716,20 +1741,20 @@ module TmuxREPL
         expected_items = expected.to_a
         timeout = timeout || @runner.timeout
         deadline = Time.instant + timeout
-
+      
         until expected_items.all? { |item| output.includes?(item) } || @completed
           remaining = deadline - Time.instant
           raise "Timed out waiting for command ##{@sequence} output; received: #{output.inspect}" if remaining <= Time::Span.zero
           @runner.receive_command_event(self, remaining)
         end
-
+      
         missing = expected_items.reject { |item| output.includes?(item) }
         raise "Command ##{@sequence} completed without expected output #{missing.map(&.inspect).join(", ")}; received: #{output.inspect}" unless missing.empty?
-
+      
         @runner.expect_command_output(@sequence, expected_items, timeout)
         self
       end
-
+      
       def expect_status(
         status : Int32,
         timeout : Time::Span? = nil
@@ -1737,11 +1762,11 @@ module TmuxREPL
         timeout = timeout || @runner.timeout
         wait_for_completion(timeout)
         raise "Command ##{@sequence} exited with status #{@status.inspect}, expected #{status}." unless @status == status
-
+      
         @runner.expect_command_status(@sequence, status, timeout)
         self
       end
-
+      
       def expect_complete(
         timeout : Time::Span? = nil
       ) : self
@@ -1750,11 +1775,11 @@ module TmuxREPL
         @runner.expect_command_complete(@sequence, timeout)
         self
       end
-
+      
       def output : String
         @output
       end
-
+      
       def accept(event : Event) : Nil
         if event.type == "output"
           @output += event.chunk.not_nil! if event.chunk
@@ -1766,7 +1791,7 @@ module TmuxREPL
           end
         end
       end
-
+      
       private def wait_for_completion(timeout : Time::Span) : Nil
         deadline = Time.instant + timeout
         until @completed
@@ -1776,14 +1801,14 @@ module TmuxREPL
         end
       end
     end
-
+  
     struct ScenarioResult
       getter name : String
       getter status : Symbol
       getter duration_ms : Float64
       getter report_path : String?
       getter details : String?
-
+      
       def initialize(
         @name : String,
         @status : Symbol,
@@ -1792,20 +1817,20 @@ module TmuxREPL
         @details : String?
       )
       end
-
+      
       def passed? : Bool
         @status == :passed
       end
-
+      
       def failed? : Bool
         @status == :failed
       end
-
+      
       def skipped? : Bool
         @status == :skipped
       end
     end
-
+  
     module Assertions
       def expect_visible(
         *expected : String,
@@ -1813,26 +1838,27 @@ module TmuxREPL
       ) : Nil
         expect_visible_items(expected.to_a, timeout || @timeout)
       end
+      
       def expect_output_without(marker : String) : Nil
         text = current_output
         raise "Output pane still contains #{marker.inspect}.\n#{text}" if text.includes?(marker)
       end
-
+      
       def expect_selected_input(sequence : Int32) : Nil
         expect_visible("INPUT ##{sequence}")
       end
-
+      
       def expect_zoomed(expected : Bool) : Nil
         found = wait_until do
           zoomed = output_pane.display_message("\#{window_zoomed_flag}") == "1"
           zoomed == expected && (!expected || output_pane.active?)
         end
         return if found
-
+      
         actual = output_pane.display_message("\#{window_zoomed_flag}") == "1"
         raise "Expected Output pane zoomed=#{expected}, got #{actual}."
       end
-
+      
       def select_pane(pane : Symbol) : Nil
         target = case pane
                  when :input
@@ -1844,7 +1870,7 @@ module TmuxREPL
                  end
         target.select
       end
-
+      
       def expect_active_pane(pane : Symbol) : Nil
         target = case pane
                  when :input
@@ -1854,9 +1880,9 @@ module TmuxREPL
                  else
                    raise ArgumentError.new("pane must be :input or :output, got #{pane.inspect}")
                  end
-
+      
         return if wait_until { target.active? }
-
+      
         actual = if input_pane.active?
           :input
         elsif output_pane.active?
@@ -1866,27 +1892,28 @@ module TmuxREPL
         end
         raise "Expected #{pane} pane to be active, got #{actual}."
       end
+      
       def current_output : String
         pane_text(output_pane)
       end
     end
-
+  
     module Cleanup
       private def finish : Nil
         if @output_pane
           cleanup_step("Restore Output pane zoom") { restore_output_zoom }
         end
-
+      
         if @restore_client && @focus
           cleanup_step("Return to original session") { return_to_origin }
         end
-
+      
         should_cleanup = @cleanup == :always || (@cleanup == :on_failure && !@failure.nil?)
         if should_cleanup && @session_name
           cleanup_step("Clean up REPL session") { cleanup_session }
         end
       end
-
+      
       private def cleanup_step(name : String, &block : ->) : Nil
         started_at = Time.instant
         begin
@@ -1907,26 +1934,26 @@ module TmuxREPL
           @failure ||= ex
         end
       end
-
+      
       private def restore_output_zoom : Nil
         pane = @output_pane
         return unless pane
         return unless pane.display_message("\#{window_zoomed_flag}") == "1"
-
+      
         pane.select
         pane.run!("resize-pane", "-Z", "-t", pane.pane_id)
       end
-
+      
       private def return_to_origin : Nil
         @origin_session.switch_client
         restored = wait_until { current_client_session_name == @origin_session_name }
         raise "The Tmux client did not return to #{@origin_session_name.inspect}." unless restored
       end
-
+      
       private def cleanup_session : Nil
         name = @session_name
         failure : Exception? = nil
-
+      
         if definition = @definition
           begin
             definition.stop
@@ -1934,7 +1961,7 @@ module TmuxREPL
             failure = ex
             @server.cmd("kill-session", "-t", name.not_nil!) if name
           end
-
+      
           begin
             wait_for_custom_host
           rescue ex
@@ -1949,68 +1976,69 @@ module TmuxREPL
               @server.cmd("kill-session", "-t", name)
             end
           end
-
+      
           begin
             stop_host_process
           rescue ex
             failure ||= ex
           end
         end
-
+      
         if name
           removed = wait_until(@host_stop_timeout) do
             !@server.cmd("has-session", "-t", name).success?
           end
           failure ||= Exception.new("Tmux session #{name.inspect} was not removed.") unless removed
         end
-
+      
         raise failure.not_nil! if failure
         @session_cleaned = true
       end
-
+      
       private def wait_for_custom_host : Nil
         result = @definition_host_result || return
         message = ""
-
+      
         select
         when value = result.receive
           message = value
         when timeout(@host_stop_timeout)
           raise "Timed out waiting for the in-process custom command host to stop."
         end
-
+      
         raise "Custom command host failed: #{message}" unless message.empty?
       end
+      
       private def host_exit_status(timeout : Time::Span) : Process::Status?
         return @host_status if @host_status
-
+      
         channel = @host_exit || return nil
         select
         when status = channel.receive
           @host_status = status
         when timeout(timeout)
         end
-
+      
         @host_status
       end
-
+      
       private def raise_host_exit! : Nil
         status = host_exit_status(0.seconds)
         raise_host_exit!(status) if status
       end
-
+      
       private def raise_host_exit!(status : Process::Status) : NoReturn
         close_host_log
         raise "Custom REPL host process exited with status #{status.exit_code}. #{host_diagnostics}"
       end
-
+      
       private def stop_host_process : Nil
         process = @host_process
         unless process
           close_host_log
           return
         end
-
+      
         status = host_exit_status(@host_stop_timeout)
         unless status
           begin
@@ -2026,38 +2054,38 @@ module TmuxREPL
           end
           status = host_exit_status(@host_stop_timeout)
         end
-
+      
         unless status
           raise "Timed out waiting for custom REPL host process #{process.pid} to exit after termination. #{host_diagnostics}"
         end
-
+      
         close_host_log
         raise "Custom REPL host exited with status #{status.exit_code}. #{host_diagnostics}" unless status.success?
       end
-
+      
       private def close_host_log : Nil
         @host_log.try &.close
         @host_log = nil
       end
-
+      
       private def host_diagnostics : String
         path = @host_log_path
         return "Host log unavailable." unless path
-
+      
         contents = File.exists?(path) ? File.read(path).strip : ""
         contents.empty? ? "Host log: #{path}" : "Host log: #{path}\n#{contents}"
       rescue ex
         "Could not read custom host log: #{ex.message}"
       end
     end
-
+  
     module Commands
       def submit(command : String) : CommandResult
         @sequence += 1
         input_pane.send_keys(command, literal: true)
         CommandResult.new(self, @sequence, command)
       end
-
+      
       def press(pane : Symbol, key : String) : Nil
         target = case pane
                  when :input
@@ -2069,9 +2097,10 @@ module TmuxREPL
                  end
         target.send_keys(key, enter: false)
       end
+      
       def receive_command_event(result : CommandResult, timeout : Time::Span) : Nil
         events = @event_channel || raise "The REPL event consumer has not started."
-
+      
         if host_exit = @host_exit
           select
           when event = events.receive
@@ -2091,7 +2120,7 @@ module TmuxREPL
           end
         end
       end
-
+      
       def expect_command_output(
         sequence : Int32,
         expected : Array(String),
@@ -2099,7 +2128,7 @@ module TmuxREPL
       ) : Nil
         expect_visible_items(["INPUT ##{sequence}"] + expected, timeout)
       end
-
+      
       def expect_command_status(
         sequence : Int32,
         status : Int32,
@@ -2107,7 +2136,7 @@ module TmuxREPL
       ) : Nil
         expect_visible("INPUT ##{sequence}", "[exit status: #{status}]", timeout: timeout)
       end
-
+      
       def expect_command_complete(
         sequence : Int32,
         timeout : Time::Span
@@ -2118,11 +2147,11 @@ module TmuxREPL
           last_text.includes?("INPUT ##{sequence}") && last_text.includes?("[exit status:")
         end
         return if found
-
+      
         raise "Timed out waiting for command ##{sequence} to complete.\n#{last_text}"
       end
     end
-
+  
     module Events
       private def start_event_consumer : Nil
         name = @session_name || raise "The REPL session has not been identified."
@@ -2132,7 +2161,7 @@ module TmuxREPL
         )
         events = Channel(Event).new(256)
         @event_channel = events
-
+      
         queue.subscribe(
           no_ack: false,
           block: false,
@@ -2159,22 +2188,21 @@ module TmuxREPL
           end
         end
       end
-
     end
-
+  
     module Helpers
       private def input_pane : Tmux::Pane
         @input_pane || raise "Input pane is not available."
       end
-
+      
       private def output_pane : Tmux::Pane
         @output_pane || raise "Output pane is not available."
       end
-
+      
       private def pane_text(pane : Tmux::Pane) : String
         pane.capture_pane(join_wrapped: true).join("\n")
       end
-
+      
       private def wait_until(
         timeout : Time::Span? = nil,
         interval : Time::Span = 25.milliseconds,
@@ -2187,7 +2215,7 @@ module TmuxREPL
         end
         yield
       end
-
+      
       private def current_client_session_name : String?
         output = IO::Memory.new
         status = Process.run(
@@ -2197,14 +2225,13 @@ module TmuxREPL
           error: Process::Redirect::Close
         )
         return nil unless status.success?
-
+      
         output.to_s.strip
       rescue
         nil
       end
-
     end
-
+  
     module Lifecycle
       def initialize(
         @name : String,
@@ -2213,7 +2240,7 @@ module TmuxREPL
         unless ENV["TMUX"]? && ENV["TMUX_PANE"]?
           raise "Run this smoke test from inside the Tmux session to return to."
         end
-
+      
         @configuration = configuration
         @cleanup = configuration.cleanup
         @focus = configuration.focus
@@ -2222,23 +2249,23 @@ module TmuxREPL
         @timeout = configuration.timeout
         @start_timeout = configuration.start_timeout
         @host_stop_timeout = configuration.host_stop_timeout
-
+      
         @server = Tmux::Server.from_env
         @origin_session = Tmux::Session.from_env
         @origin_session_name = @origin_session.session_name
         @started_at = Time.utc
       end
-
+      
       getter timeout : Time::Span
-
+      
       def run(&scenario : Testing ->) : Nil
         run_result { |runner| yield runner }
         raise @failure.not_nil! if @failure
       end
-
+      
       def run_result(&scenario : Testing ->) : ScenarioResult
         started_at = Time.instant
-
+      
         begin
           yield self
         rescue ex
@@ -2255,10 +2282,10 @@ module TmuxREPL
         ensure
           finish
         end
-
+      
         report_path = write_machine_report
         print_report(report_path)
-
+      
         ScenarioResult.new(
           @name,
           @report.all? { |check| check[:passed] } ? :passed : :failed,
@@ -2267,19 +2294,18 @@ module TmuxREPL
           @failure.try { |exception| "#{exception.class}: #{exception.message}" }
         )
       end
-
     end
-
+  
     module Reporting
       private def write_machine_report : String
         passed = @report.all? { |check| check[:passed] }
         finished_at = Time.utc.to_unix_ms
         directory = State.smoke_tests_path
         FileUtils.mkdir_p(directory)
-
+      
         path = File.join(directory, "smoke-test-#{@started_at.to_unix_ms}-#{Process.pid}.json")
         temporary_path = "#{path}.tmp"
-
+      
         contents = JSON.build(indent: "  ") do |json|
           json.object do
             json.field "schema_version", 1
@@ -2318,12 +2344,12 @@ module TmuxREPL
             end
           end
         end
-
+      
         File.write(temporary_path, contents + "\n")
         File.rename(temporary_path, path)
         path
       end
-
+      
       private def print_report(machine_report_path : String) : Nil
         puts
         puts "#{@name} smoke test"
@@ -2331,7 +2357,7 @@ module TmuxREPL
         puts "Original session: #{@origin_session_name}"
         puts "Smoke-test session: #{@session_name || "(not created)"}"
         puts
-
+      
         @report.each do |check|
           marker = check[:passed] ? "\e[32mPASS\e[0m" : "\e[31mFAIL\e[0m"
           duration = "#{check[:duration_ms].round(0)} ms"
@@ -2339,7 +2365,7 @@ module TmuxREPL
           summary = details.empty? ? duration : "#{duration}; #{details}"
           puts "#{marker}  #{check[:name]} (#{summary})"
         end
-
+      
         puts
         if name = @session_name
           if @session_cleaned
@@ -2353,18 +2379,17 @@ module TmuxREPL
         end
         puts "Machine-readable report: #{machine_report_path}"
       end
-
     end
-
+  
     module Start
       def session_name : String
         @session_name || raise "The REPL session has not been started."
       end
-
+      
       def session_exists?(name : String) : Bool
         @server.cmd("has-session", "-t", name).success?
       end
-
+      
       # Start the regular CLI and identify the single new session it creates.
       def start_cli(
         executable : String,
@@ -2372,14 +2397,14 @@ module TmuxREPL
       ) : self
         raise "A REPL session has already been started." if @session_name
         raise "Missing #{executable}. Build the executables first with shards build." unless File::Info.executable?(executable)
-
+      
         existing_session_ids = @server.sessions.map(&.session_id)
         environment = {} of String => String?
         ENV.each { |key, value| environment[key] = value }
         environment["TMUX_REPL_SESSION"] = nil
         cli_arguments = arguments.dup
         cli_arguments << "--no-focus" unless @focus || cli_arguments.includes?("--no-focus")
-
+      
         stdout = IO::Memory.new
         stderr = IO::Memory.new
         status = Process.run(
@@ -2392,31 +2417,31 @@ module TmuxREPL
         unless status.success?
           raise "#{executable} #{arguments.join(" ")} failed (#{status.exit_code}).\n#{stdout}\n#{stderr}"
         end
-
+      
         created : Tmux::Session? = nil
         found = wait_until(@start_timeout) do
           candidates = @server.sessions.select do |session|
             !existing_session_ids.includes?(session.session_id) &&
               session.session_name.starts_with?("#{@origin_session_name}|repl-")
           end
-
+      
           raise "Expected one new REPL session, found #{candidates.size}." if candidates.size > 1
-
+      
           created = candidates.first?
           !created.nil?
         end
-
+      
         unless found
           raise "Could not find the session created by #{executable} #{arguments.join(" ")}."
         end
-
+      
         @session_name = created.not_nil!.session_name
         attach_session
         ensure_foreground! if @focus
         self
       end
-
-
+      
+      
       # Start a custom REPL application in a separate process. The expected session
       # name is explicit, so discovery never depends on a session-name prefix.
       def start_host(
@@ -2430,7 +2455,7 @@ module TmuxREPL
         if @server.cmd("has-session", "-t", expected_session_name).success?
           raise "Tmux session #{expected_session_name.inspect} already exists."
         end
-
+      
         @session_name = expected_session_name
         FileUtils.mkdir_p(State.smoke_tests_path)
         @host_log_path = File.join(
@@ -2438,10 +2463,10 @@ module TmuxREPL
           "custom-host-#{Process.pid}-#{Time.utc.to_unix_ms}.log"
         )
         @host_log = File.open(@host_log_path.not_nil!, "w")
-
+      
         host_arguments = arguments.dup
         host_arguments << "--no-focus" unless @focus || host_arguments.includes?("--no-focus")
-
+      
         process = Process.new(
           executable,
           host_arguments,
@@ -2451,13 +2476,13 @@ module TmuxREPL
           error: @host_log.not_nil!
         )
         @host_process = process
-
+      
         exit_channel = Channel(Process::Status).new(1)
         @host_exit = exit_channel
         spawn do
           exit_channel.send(process.wait)
         end
-
+      
         ready = wait_until(@start_timeout) do
           raise_host_exit!
           custom_session_ready?(expected_session_name)
@@ -2465,12 +2490,12 @@ module TmuxREPL
         unless ready
           raise "Timed out waiting for custom REPL #{expected_session_name.inspect} to become ready. #{host_diagnostics}"
         end
-
+      
         attach_session
         ensure_foreground! if @focus
         self
       end
-
+      
       # Start a custom REPL in this process so its handlers retain access to
       # application-owned objects. Custom test sessions are always temporary.
       def start_custom(definition : Definition) : self
@@ -2479,13 +2504,13 @@ module TmuxREPL
         if @server.cmd("has-session", "-t", definition.name).success?
           raise "Tmux session #{definition.name.inspect} already exists."
         end
-
+      
         raise "Custom REPL tests require cleanup: :always." unless @cleanup == :always
-
+      
         definition.start(focus: @focus)
         @definition = definition
         @session_name = definition.name
-
+      
         host_result = Channel(String).new(1)
         @definition_host_result = host_result
         spawn do
@@ -2498,47 +2523,49 @@ module TmuxREPL
             host_result.send(result)
           end
         end
-
+      
         attach_session
         ensure_foreground! if @focus
         self
       end
+      
       private def attach_session : Nil
         name = @session_name || raise "The REPL session has not been identified."
         session = @server.session(name)
         panes = session.active_window.panes
         raise "Expected two panes in #{name.inspect}, found #{panes.size}." unless panes.size == 2
-
+      
         @input_pane = panes[0]
         @output_pane = panes[1]
         start_event_consumer
       end
-
+      
       private def ensure_foreground! : Nil
         current = current_client_session_name
         expected = @session_name
         raise "Expected the foreground Tmux session to be #{expected.inspect}, got #{current.inspect}." unless current == expected
       end
+      
       private def custom_session_ready?(name : String) : Bool
         return false unless @server.cmd("has-session", "-t", name).success?
-
+      
         state = State.new(name)
         return false unless File.exists?(state.path("input.pid"))
         return false unless File.exists?(state.path("output.pid"))
-
+      
         @server.session(name).active_window.panes.size == 2
       end
     end
-
+  
     module Steps
       def step(name : String, &block : -> T) : Nil forall T
         record_step(name) { yield }
       end
-
+      
       private def record_step(name : String, &block : -> T) : Nil forall T
         started_at = Time.instant
         @stage = name
-
+      
         begin
           yield
           @report << {
@@ -2558,13 +2585,12 @@ module TmuxREPL
           raise ex
         end
       end
-
     end
-
+  
     DEFAULT_TIMEOUT = 8.seconds
     START_TIMEOUT = 8.seconds
     HOST_STOP_TIMEOUT = 5.seconds
-
+    
     @server : Tmux::Server
     @origin_session : Tmux::Session
     @origin_session_name : String
@@ -2593,6 +2619,7 @@ module TmuxREPL
       duration_ms: Float64,
       details: String
     )
+    
     include Assertions
     include Cleanup
     include Commands
@@ -2602,6 +2629,7 @@ module TmuxREPL
     include Reporting
     include Start
     include Steps
+    
     def self.run(
       name : String,
       cleanup : Symbol = :never,
@@ -2626,7 +2654,7 @@ module TmuxREPL
       runner = new(name, configuration)
       runner.run { yield runner }
     end
-
+    
     def self.run(
       scenario_class : T.class,
       name : String,
@@ -2651,7 +2679,7 @@ module TmuxREPL
       scenario = scenario_class.new(name, configuration)
       scenario.run { scenario.execute_steps }
     end
-
+    
     def self.run_result(
       scenario_class : T.class,
       name : String,
@@ -2676,6 +2704,7 @@ module TmuxREPL
       scenario = scenario_class.new(name, configuration)
       scenario.run_result { |_runner| scenario.execute_steps }
     end
+    
     def expect_visible_items(
       expected_items : Array(String),
       timeout : Time::Span = DEFAULT_TIMEOUT
@@ -2686,31 +2715,31 @@ module TmuxREPL
         expected_items.all? { |item| last_text.includes?(item) }
       end
       return if found
-
+    
       missing = expected_items.reject { |item| last_text.includes?(item) }
       raise "Timed out waiting for the Output pane to show #{missing.map(&.inspect).join(", ")}.\n#{last_text}"
     end
-
+  
     class Suite
       struct Registration
         getter name : String
-
+      
         @runner : Proc(ScenarioResult)
-
+      
         def initialize(@name : String, @runner : Proc(ScenarioResult))
         end
-
+      
         def run : ScenarioResult
           @runner.call
         end
       end
-
+      
       struct Report
         getter name : String
         getter scenarios : Array(ScenarioResult)
         getter duration_ms : Float64
         getter report_path : String
-
+      
         def initialize(
           @name : String,
           @scenarios : Array(ScenarioResult),
@@ -2718,23 +2747,23 @@ module TmuxREPL
           @report_path : String
         )
         end
-
+      
         def success? : Bool
           @scenarios.all?(&.passed?)
         end
-
+      
         def exit_code : Int32
           success? ? 0 : 1
         end
       end
-
+      
       @registrations = [] of Registration
       @run_count = 0
-
+      
       def initialize(@name : String, @fail_fast : Bool = false)
         raise ArgumentError.new("Suite name cannot be empty.") if @name.strip.empty?
       end
-
+      
       # Register a scenario class. Each registration gets its own Testing
       # configuration and a fresh scenario instance when the suite is run.
       def add(
@@ -2752,7 +2781,7 @@ module TmuxREPL
         if @registrations.any? { |registration| registration.name == name }
           raise ArgumentError.new("Scenario #{name.inspect} is already registered in #{@name.inspect}.")
         end
-
+      
         runner = -> {
           Testing.run_result(
             scenario_class,
@@ -2769,17 +2798,17 @@ module TmuxREPL
         @registrations << Registration.new(name, runner)
         self
       end
-
+      
       # Run registered scenarios sequentially. Failures are collected and do not
       # stop later scenarios unless fail_fast was enabled when the suite was built.
       def run : Report
         raise "Cannot run an empty test suite." if @registrations.empty?
-
+      
         started_at = Time.instant
         started_at_utc = Time.utc
         results = [] of ScenarioResult
         failed = false
-
+      
         @registrations.each do |registration|
           if @fail_fast && failed
             results << ScenarioResult.new(
@@ -2791,7 +2820,7 @@ module TmuxREPL
             )
             next
           end
-
+      
           scenario_started_at = Time.instant
           begin
             result = execute_scenario(registration)
@@ -2808,20 +2837,20 @@ module TmuxREPL
             failed = true
           end
         end
-
+      
         finished_at_utc = Time.utc
         duration_ms = (Time.instant - started_at).total_milliseconds
         @run_count += 1
         report_path = write_machine_report(results, started_at_utc, finished_at_utc, duration_ms)
         print_report(results, duration_ms, report_path)
-
+      
         Report.new(@name, results, duration_ms, report_path)
       end
-
+      
       protected def execute_scenario(registration : Registration) : ScenarioResult
         registration.run
       end
-
+      
       protected def print_report(
         results : Array(ScenarioResult),
         duration_ms : Float64,
@@ -2830,7 +2859,7 @@ module TmuxREPL
         puts
         puts "#{@name} test suite"
         puts "=" * 72
-
+      
         results.each do |result|
           marker = case result.status
                    when :passed then "\e[32mPASS\e[0m"
@@ -2842,7 +2871,7 @@ module TmuxREPL
           puts "#{marker}  #{result.name} (#{summary})"
           puts "       Scenario report: #{result.report_path}" if result.report_path
         end
-
+      
         passed = results.count(&.passed?)
         failed = results.count(&.failed?)
         skipped = results.count(&.skipped?)
@@ -2851,7 +2880,7 @@ module TmuxREPL
         puts "Duration: #{duration_ms.round(0)} ms"
         puts "Suite report: #{report_path}"
       end
-
+      
       private def write_machine_report(
         results : Array(ScenarioResult),
         started_at : Time,
@@ -2860,14 +2889,14 @@ module TmuxREPL
       ) : String
         directory = State.smoke_tests_path
         FileUtils.mkdir_p(directory)
-
+      
         path = File.join(
           directory,
           "suite-#{started_at.to_unix_ms}-#{Process.pid}-#{@run_count}.json"
         )
         temporary_path = "#{path}.tmp"
         passed = results.all?(&.passed?)
-
+      
         contents = JSON.build(indent: "  ") do |json|
           json.object do
             json.field "schema_version", 1
@@ -2893,27 +2922,27 @@ module TmuxREPL
             end
           end
         end
-
+      
         File.write(temporary_path, contents + "\n")
         File.rename(temporary_path, path)
         path
       end
     end
-
+  
     abstract class Scenario < Testing
       def execute_steps : Nil
         run_steps
       end
-
+      
       def run_steps : Nil
       end
-
+      
       macro inherited
         def run_steps : Nil
           super
         end
       end
-
+      
       macro step(name, &block)
         def run_steps : Nil
           previous_def
