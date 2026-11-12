@@ -165,7 +165,12 @@ jobs:
           retention-days: 14
       - name: Show LavinMQ logs on failure
         if: failure()
-        run: docker logs lavinmq
+        run: |
+          if docker container inspect lavinmq >/dev/null 2>&1; then
+            docker logs lavinmq || echo "Warning: could not retrieve LavinMQ logs." >&2
+          else
+            echo "LavinMQ container was not created; skipping log collection."
+          fi
       - name: Stop LavinMQ
         if: always()
         run: docker rm --force lavinmq >/dev/null 2>&1 || true
