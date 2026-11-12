@@ -1,5 +1,5 @@
 require "file_utils"
-require "mutex"
+require "sync/mutex"
 require "json"
 require "global-amqp_channel"
 require "tmux"
@@ -284,6 +284,7 @@ module CustomREPL
       )
     end
   end
+
   module Protocol
     def self.component_name(session_name : String) : String
       component = session_name.gsub(/[^a-zA-Z0-9._-]/, "_")

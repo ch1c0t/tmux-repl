@@ -1,5 +1,5 @@
 file_utils
-mutex
+sync/mutex
 json
 global-amqp_channel
 tmux
