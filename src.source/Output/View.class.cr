@@ -43,6 +43,17 @@ def wrap_lines? : Bool
   @mutex.synchronize { @wrap_lines }
 end
 
+# Return the complete output currently represented by the selected view.
+# Viewport scrolling and the available-outputs list do not truncate this value.
+def current_output : String?
+  @mutex.synchronize do
+    if sequence = @selected_sequence
+      completed = @statuses.has_key?(sequence)
+      displayed_output_for(sequence, completed)[0]
+    end
+  end
+end
+
 # Move the output viewport vertically or horizontally.
 def scroll(action : TmuxREPL::Keyboard::Action) : Bool
   @mutex.synchronize { scroll_current_view_locked(action) }

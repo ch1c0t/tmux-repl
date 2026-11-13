@@ -31,7 +31,11 @@ def run : Nil
     end
 
     on_action = ->(action : TmuxREPL::Keyboard::Action) do
-      view.render if view.scroll(action)
+      if action == TmuxREPL::Keyboard::Action::YankOutput
+        yank_output(view)
+      else
+        view.render if view.scroll(action)
+      end
       nil
     end
     dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue, on_action)

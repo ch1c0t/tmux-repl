@@ -10,6 +10,8 @@ private def handle_message(
 
     if event_type == "toggle_output_zoom"
       toggle_output_zoom(view, data)
+    elsif event_type == "yank_output"
+      yank_output(view)
     else
       view.update(data)
 
@@ -38,6 +40,19 @@ private def handle_message(
   end
 end
 
+
+# Copy the complete selected output to both X11 selections.
+private def yank_output(view : View) : Nil
+  unless output = view.current_output
+    STDERR.puts "tmux.repl.output: there is no current output to yank"
+    return
+  end
+
+  X11Clipboard.new.copy(output)
+  STDERR.puts "tmux.repl.output: current output copied to X11 clipboard and primary selection"
+rescue ex
+  STDERR.puts "tmux.repl.output: failed to yank current output: #{ex.message}"
+end
 
 # Alt+Z always zooms the Output pane. Remember the pane that requested the
 # zoom so the second Alt+Z restores focus after removing the zoom.
