@@ -44,7 +44,6 @@ end
 # Copy the complete selected output to both X11 selections.
 private def yank_output(view : View) : Nil
   unless output = view.current_output
-    STDERR.puts "tmux.repl.output: there is no current output to yank"
     return
   end
 
@@ -52,7 +51,15 @@ private def yank_output(view : View) : Nil
   DesktopNotification.new.output_copied
   nil
 rescue ex
-  STDERR.puts "tmux.repl.output: failed to yank current output: #{ex.message}"
+  record_yank_failure(ex)
+end
+
+# Keep yank failures out of the rendered terminal pane.
+private def record_yank_failure(exception : Exception) : Nil
+  File.open(File.join(state_dir, "output.yank.log"), "a") do |file|
+    file.puts("#{Time.utc}: #{exception.class}: #{exception.message}")
+  end
+rescue
 end
 
 # Alt+Z always zooms the Output pane. Remember the pane that requested the
