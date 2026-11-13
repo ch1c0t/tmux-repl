@@ -49,7 +49,8 @@ private def yank_output(view : View) : Nil
   end
 
   X11Clipboard.new.copy(output)
-  STDERR.puts "tmux.repl.output: current output copied to X11 clipboard and primary selection"
+  DesktopNotification.new.output_copied
+  nil
 rescue ex
   STDERR.puts "tmux.repl.output: failed to yank current output: #{ex.message}"
 end
