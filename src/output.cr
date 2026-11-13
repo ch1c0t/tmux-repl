@@ -1,9 +1,37 @@
+require "io/memory"
 require "json"
 require "sync/mutex"
 require "./tmux_repl"
 
 module Output
   # Output-pane process implementation and rendering.
+
+  class DesktopNotification
+    getter notify_send_path : String
+    
+    def initialize(@notify_send_path : String = ENV["TMUX_REPL_NOTIFY_SEND"]? || "notify-send")
+    end
+    
+    # Display a short confirmation outside the tmux pane. Notification delivery
+    # is optional and must never affect a successful clipboard operation.
+    def output_copied : Bool
+      status = Process.run(
+        @notify_send_path,
+        [
+          "--app-name=tmux.repl",
+          "--urgency=low",
+          "--expire-time=1500",
+          "Output copied",
+          "Available in X11 CLIPBOARD and PRIMARY.",
+        ],
+        output: Process::Redirect::Close,
+        error: Process::Redirect::Close
+      )
+      status.success?
+    rescue
+      false
+    end
+  end
 
   class Runner
     module Consume
@@ -19,6 +47,8 @@ module Output
       
           if event_type == "toggle_output_zoom"
             toggle_output_zoom(view, data)
+          elsif event_type == "yank_output"
+            yank_output(view)
           else
             view.update(data)
       
@@ -47,6 +77,27 @@ module Output
         end
       end
       
+      
+      # Copy the complete selected output to both X11 selections.
+      private def yank_output(view : View) : Nil
+        unless output = view.current_output
+          return
+        end
+      
+        X11Clipboard.new.copy(output)
+        DesktopNotification.new.output_copied
+        nil
+      rescue ex
+        record_yank_failure(ex)
+      end
+      
+      # Keep yank failures out of the rendered terminal pane.
+      private def record_yank_failure(exception : Exception) : Nil
+        File.open(File.join(state_dir, "output.yank.log"), "a") do |file|
+          file.puts("#{Time.utc}: #{exception.class}: #{exception.message}")
+        end
+      rescue
+      end
       
       # Alt+Z always zooms the Output pane. Remember the pane that requested the
       # zoom so the second Alt+Z restores focus after removing the zoom.
@@ -211,7 +262,11 @@ module Output
           end
       
           on_action = ->(action : TmuxREPL::Keyboard::Action) do
-            view.render if view.scroll(action)
+            if action == TmuxREPL::Keyboard::Action::YankOutput
+              yank_output(view)
+            else
+              view.render if view.scroll(action)
+            end
             nil
           end
           dispatcher = TmuxREPL::Keyboard::Dispatcher.new(@session_name, "output", queue, on_action)
@@ -800,6 +855,17 @@ module Output
       @mutex.synchronize { @wrap_lines }
     end
     
+    # Return the complete output currently represented by the selected view.
+    # Viewport scrolling and the available-outputs list do not truncate this value.
+    def current_output : String?
+      @mutex.synchronize do
+        if sequence = @selected_sequence
+          completed = @statuses.has_key?(sequence)
+          displayed_output_for(sequence, completed)[0]
+        end
+      end
+    end
+    
     # Move the output viewport vertically or horizontally.
     def scroll(action : TmuxREPL::Keyboard::Action) : Bool
       @mutex.synchronize { scroll_current_view_locked(action) }
@@ -919,5 +985,28 @@ module Output
     
     include Update
     include Render
+  end
+
+  class X11Clipboard
+    getter xclip_path : String
+    
+    def initialize(@xclip_path : String = ENV["TMUX_REPL_XCLIP"]? || "xclip")
+    end
+    
+    # Copy the same complete text to both X11 selections, matching Neovim's + and * registers.
+    def copy(text : String) : Nil
+      {"clipboard", "primary"}.each do |selection|
+        status = Process.run(
+          @xclip_path,
+          ["-selection", selection, "-i"],
+          input: IO::Memory.new(text),
+          output: Process::Redirect::Close
+        )
+    
+        unless status.success?
+          raise "xclip exited with status #{status.exit_code} for the #{selection} selection"
+        end
+      end
+    end
   end
 end

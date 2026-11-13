@@ -83,6 +83,21 @@ describe TmuxREPL::Keyboard::InputIO do
     String.new(buffer[0, third_size]).should eq("tail")
   end
 
+  it "consumes Alt+Y sequences instead of passing them to Reply" do
+    source = ChunkedInputIO.new(["before\e", "yafter\e[121;", "3utail"])
+    input = TmuxREPL::Keyboard::InputIO.new(source)
+    buffer = Bytes.new(1024)
+
+    first_size = input.read(buffer)
+    String.new(buffer[0, first_size]).should eq("before")
+
+    second_size = input.read(buffer)
+    String.new(buffer[0, second_size]).should eq("after")
+
+    third_size = input.read(buffer)
+    String.new(buffer[0, third_size]).should eq("tail")
+  end
+
   it "consumes Ctrl+L instead of passing it to Reply" do
     input = TmuxREPL::Keyboard::InputIO.new(IO::Memory.new("before\fafter"))
     buffer = Bytes.new(1024)

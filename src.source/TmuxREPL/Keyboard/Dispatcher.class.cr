@@ -126,6 +126,19 @@ private def dispatch(press : KeyPress) : Nil
                STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                "publish_failed"
              end
+           when Action::YankOutput
+             if @pane == "input"
+               begin
+                 TmuxREPL.publish_event(@events, "yank_output", @session_name, 0_u64)
+                 "published"
+               rescue ex
+                 STDERR.puts "tmux.repl.input: failed to publish #{action}: #{ex.message}"
+                 "publish_failed"
+               end
+             else
+               @on_action.try &.call(action.not_nil!)
+               "handled_by_output_view"
+             end
            when Action::SelectPrevious, Action::SelectNext
              "handled_by_input_reader"
            when Action::ScrollUp, Action::ScrollDown, Action::ScrollPageUp, Action::ScrollPageDown,

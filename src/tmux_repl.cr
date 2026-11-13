@@ -350,6 +350,7 @@ module TmuxREPL
       ToggleOutputList
       ToggleOutputWrap
       ToggleOutputZoom
+      YankOutput
       SelectPrevious
       SelectNext
       SubmitInput
@@ -427,11 +428,14 @@ module TmuxREPL
       SequenceBinding.new("Alt+Home", Action::ScrollHorizontalStart, "Alt+Home", "Jump to the start of an unwrapped line."),
       SequenceBinding.new("Alt+End", Action::ScrollHorizontalEnd, "Alt+End", "Jump to the end of an unwrapped line."),
       SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane from either pane."),
+      SequenceBinding.new("Alt+Y", Action::YankOutput, "Alt+Y", "Yank the current output to the X11 clipboard and primary selection."),
     ]
     
     # xterm modifier parameter 3 represents Alt combined with the key.
     INPUT_ACTION_SEQUENCES = {
       "\ez"       => "Alt+Z",
+      "\ey"       => "Alt+Y",
+      "\e[121;3u" => "Alt+Y",
       "\e[122;3u" => "Alt+Z",
       "\e[1;3A" => "Alt+Up",
       "\e[1;3B" => "Alt+Down",
@@ -453,6 +457,7 @@ module TmuxREPL
     
     INPUT_SEQUENCE_STRINGS = [
       "\ez", "\e[122;3u",
+      "\ey", "\e[121;3u",
       "\ek", "\ej", "\e[107;3u", "\e[106;3u",
       "\e[1;5A", "\e[1;5B",
       "\e[1;3A", "\e[1;3B", "\e[5;3~", "\e[6;3~",
@@ -465,6 +470,8 @@ module TmuxREPL
     OUTPUT_SEQUENCE_BINDINGS = {
       "\ez"       => SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane."),
       "\e[122;3u" => SequenceBinding.new("Alt+Z", Action::ToggleOutputZoom, "Alt+Z", "Zoom or restore the Output pane."),
+      "\ey"       => SequenceBinding.new("Alt+Y", Action::YankOutput, "Alt+Y", "Yank the current output to the X11 clipboard and primary selection."),
+      "\e[121;3u" => SequenceBinding.new("Alt+Y", Action::YankOutput, "Alt+Y", "Yank the current output to the X11 clipboard and primary selection."),
       "\e[A"    => SequenceBinding.new("Up", Action::ScrollUp, "Up", "Scroll output up one line."),
       "\e[B"    => SequenceBinding.new("Down", Action::ScrollDown, "Down", "Scroll output down one line."),
       "\e[5~"   => SequenceBinding.new("PageUp", Action::ScrollPageUp, "PageUp", "Scroll output up one page."),
@@ -530,7 +537,7 @@ module TmuxREPL
     end
     
     def self.help_text : String
-      toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap · Alt+Z zoom Output"
+      toggle_help = "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap · Alt+Z zoom · Alt+Y yank Output"
       horizontal_help = "Alt+←/→ scroll · Alt+Home/End jump"
       bindings = BINDINGS.reject do |binding|
         binding.action == Action::ToggleOutputView || binding.action == Action::ToggleOutputList || binding.action == Action::ToggleOutputWrap
@@ -540,7 +547,8 @@ module TmuxREPL
           binding.action == Action::ScrollHorizontalRight ||
           binding.action == Action::ScrollHorizontalStart ||
           binding.action == Action::ScrollHorizontalEnd ||
-          binding.action == Action::ToggleOutputZoom
+          binding.action == Action::ToggleOutputZoom ||
+          binding.action == Action::YankOutput
       end
     
       ([toggle_help, horizontal_help] + bindings.map(&.help_line) + horizontal_bindings.map(&.help_line)).join("\n")
@@ -628,7 +636,7 @@ module TmuxREPL
         end
       end
       
-      # Consume Alt scrolling locally in the input frontend, while translating the
+      # Consume output controls in the input frontend, while translating the
       # existing Alt+K/J aliases into the Ctrl arrows understood by Reply 0.4.
       private def translate_navigation_sequences(eof : Bool) : Int32
         input_offset = 0
@@ -999,6 +1007,19 @@ module TmuxREPL
                    rescue ex
                      STDERR.puts "tmux.repl.#{@pane}: failed to publish #{action}: #{ex.message}"
                      "publish_failed"
+                   end
+                 when Action::YankOutput
+                   if @pane == "input"
+                     begin
+                       TmuxREPL.publish_event(@events, "yank_output", @session_name, 0_u64)
+                       "published"
+                     rescue ex
+                       STDERR.puts "tmux.repl.input: failed to publish #{action}: #{ex.message}"
+                       "publish_failed"
+                     end
+                   else
+                     @on_action.try &.call(action.not_nil!)
+                     "handled_by_output_view"
                    end
                  when Action::SelectPrevious, Action::SelectNext
                    "handled_by_input_reader"

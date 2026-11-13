@@ -10,6 +10,8 @@ private def handle_message(
 
     if event_type == "toggle_output_zoom"
       toggle_output_zoom(view, data)
+    elsif event_type == "yank_output"
+      yank_output(view)
     else
       view.update(data)
 
@@ -38,6 +40,27 @@ private def handle_message(
   end
 end
 
+
+# Copy the complete selected output to both X11 selections.
+private def yank_output(view : View) : Nil
+  unless output = view.current_output
+    return
+  end
+
+  X11Clipboard.new.copy(output)
+  DesktopNotification.new.output_copied
+  nil
+rescue ex
+  record_yank_failure(ex)
+end
+
+# Keep yank failures out of the rendered terminal pane.
+private def record_yank_failure(exception : Exception) : Nil
+  File.open(File.join(state_dir, "output.yank.log"), "a") do |file|
+    file.puts("#{Time.utc}: #{exception.class}: #{exception.message}")
+  end
+rescue
+end
 
 # Alt+Z always zooms the Output pane. Remember the pane that requested the
 # zoom so the second Alt+Z restores focus after removing the zoom.
