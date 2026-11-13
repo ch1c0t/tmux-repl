@@ -25,6 +25,15 @@ describe TmuxREPL::Keyboard do
     TmuxREPL::Keyboard.output_sequence_binding_for("\e[122;3u").not_nil!.action.should eq(action)
   end
 
+  it "maps Alt+Y to yanking the current output" do
+    binding = TmuxREPL::Keyboard.sequence_binding_for("Alt+Y").not_nil!
+
+    binding.action.should eq(TmuxREPL::Keyboard::Action::YankOutput)
+    TmuxREPL::Keyboard.label_for(binding.action).should eq("Alt+Y")
+    TmuxREPL::Keyboard.output_sequence_binding_for("\ey").not_nil!.action.should eq(binding.action)
+    TmuxREPL::Keyboard.output_sequence_binding_for("\e[121;3u").not_nil!.action.should eq(binding.action)
+  end
+
   it "maps Ctrl+L to the available-outputs list toggle" do
     action = TmuxREPL::Keyboard::Action::ToggleOutputList
 
@@ -71,6 +80,8 @@ describe TmuxREPL::Keyboard do
     {
       "\ez"       => TmuxREPL::Keyboard::Action::ToggleOutputZoom,
       "\e[122;3u" => TmuxREPL::Keyboard::Action::ToggleOutputZoom,
+      "\ey"       => TmuxREPL::Keyboard::Action::YankOutput,
+      "\e[121;3u" => TmuxREPL::Keyboard::Action::YankOutput,
       "\e[A"    => TmuxREPL::Keyboard::Action::ScrollUp,
       "\e[B"    => TmuxREPL::Keyboard::Action::ScrollDown,
       "\e[5~"   => TmuxREPL::Keyboard::Action::ScrollPageUp,
@@ -110,7 +121,7 @@ describe TmuxREPL::Keyboard do
 
     TmuxREPL::Keyboard.label_for(action).should eq("Ctrl+G")
     TmuxREPL::Keyboard.help_text.should eq(
-      "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap · Alt+Z zoom Output\n" \
+      "Ctrl+G raw · Ctrl+L list · Ctrl+W wrap · Alt+Z zoom · Alt+Y yank Output\n" \
       "Alt+←/→ scroll · Alt+Home/End jump\n" \
       "Ctrl+Up         Select the previous input.\n" \
       "Ctrl+Down       Select the next input.\n" \

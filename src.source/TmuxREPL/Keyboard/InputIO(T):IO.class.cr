@@ -79,7 +79,7 @@ private def refill : Nil
   end
 end
 
-# Consume Alt scrolling locally in the input frontend, while translating the
+# Consume output controls in the input frontend, while translating the
 # existing Alt+K/J aliases into the Ctrl arrows understood by Reply 0.4.
 private def translate_navigation_sequences(eof : Bool) : Int32
   input_offset = 0
