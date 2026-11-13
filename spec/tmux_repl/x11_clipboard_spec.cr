@@ -10,13 +10,13 @@ describe Output::X11Clipboard do
     script = <<-SH
       #!/usr/bin/env sh
       set -eu
-      printf '%s\\n' "$2" >> "#{selections_path}"
+      printf '%s\n' "$2" >> "#{selections_path}"
       cat > "#{directory}/$2"
     SH
     File.write(executable, script)
     File.chmod(executable, 0o755)
 
-    text = "first line\\nsecond line\\n"
+    text = "first line\nsecond line\n"
     Output::X11Clipboard.new(executable).copy(text)
 
     File.read(selections_path).lines.map(&.strip).should eq(["clipboard", "primary"])
