@@ -57,13 +57,13 @@ module Output
           STDERR.puts "tmux.repl.output: there is no current output to yank"
           return
         end
-
+      
         X11Clipboard.new.copy(output)
         STDERR.puts "tmux.repl.output: current output copied to X11 clipboard and primary selection"
       rescue ex
         STDERR.puts "tmux.repl.output: failed to yank current output: #{ex.message}"
       end
-
+      
       # Alt+Z always zooms the Output pane. Remember the pane that requested the
       # zoom so the second Alt+Z restores focus after removing the zoom.
       private def toggle_output_zoom(view : View, data : JSON::Any) : Nil
@@ -819,7 +819,7 @@ module Output
     def wrap_lines? : Bool
       @mutex.synchronize { @wrap_lines }
     end
-
+    
     # Return the complete output currently represented by the selected view.
     # Viewport scrolling and the available-outputs list do not truncate this value.
     def current_output : String?
@@ -954,10 +954,10 @@ module Output
 
   class X11Clipboard
     getter xclip_path : String
-
+    
     def initialize(@xclip_path : String = ENV["TMUX_REPL_XCLIP"]? || "xclip")
     end
-
+    
     # Copy the same complete text to both X11 selections, matching Neovim's + and * registers.
     def copy(text : String) : Nil
       {"clipboard", "primary"}.each do |selection|
@@ -967,7 +967,7 @@ module Output
           input: IO::Memory.new(text),
           output: Process::Redirect::Close
         )
-
+    
         unless status.success?
           raise "xclip exited with status #{status.exit_code} for the #{selection} selection"
         end
