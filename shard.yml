@@ -21,7 +21,7 @@ targets:
 dependencies:
   pty:
     github: ch1c0t/crystal.pty
-    branch: main
+    branch: fix/ioctl-ffi-name-collision
   reply:
     github: I3oris/reply
     version: "~> 0.4.0"
