@@ -28,14 +28,34 @@ end
 # The editor text is left untouched; Tab/Shift+Tab can accept or cycle suggestions.
 private def on_char(char : Char) : Nil
   super
+  refresh_command_completions
+end
 
-  if command_position?
-    unless @auto_completion.open?
+# Reply can batch pasted text into a String instead of individual Char events.
+private def on_string(string : String) : Nil
+  super
+  refresh_command_completions(force: true)
+end
+
+private def refresh_command_completions(force = false) : Nil
+  if command_position? && !@editor.current_word.empty?
+    if force || !@auto_completion.open?
       compute_completions
       @auto_completion.open unless @auto_completion.entries.empty?
     end
   else
     @auto_completion.close if @auto_completion.open?
+  end
+end
+
+# Reply normally closes its completion popup when a whole String is inserted.
+# Keep live suggestions in sync for pasted or batched input instead.
+private def auto_complete_insert_char(char)
+  if char.is_a?(String)
+    refresh_command_completions(force: true)
+    nil
+  else
+    super
   end
 end
 
