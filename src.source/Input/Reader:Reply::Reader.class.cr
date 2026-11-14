@@ -53,9 +53,12 @@ end
 private def auto_complete_insert_char(char)
   if char.is_a?(String)
     refresh_command_completions(force: true)
+    @editor.update
     nil
   else
-    super
+    replacement = super
+    @editor.update
+    replacement
   end
 end
 
