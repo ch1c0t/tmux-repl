@@ -14,7 +14,7 @@ shards:
 
   pty:
     git: https://github.com/ch1c0t/crystal.pty.git
-    version: 0.1.0+git.commit.1b373b45cbcf8436463db86364affc1cd8d185bb
+    version: 0.1.0+git.commit.c0fa67fa0d5dc3c1c520fbd0b8462b73cd8b99e3
 
   queue:
     git: https://github.com/ch1c0t/crystal.queue.git
