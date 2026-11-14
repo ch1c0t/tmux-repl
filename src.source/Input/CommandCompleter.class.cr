@@ -1,5 +1,4 @@
 # Discover shell commands from PATH without invoking a shell for each keystroke.
-class CommandCompleter
   SHELL_BUILTINS = %w(
     . : alias bg break cd command continue echo eval exec exit export false
     fg getopts hash jobs kill local printf pwd read readonly return set shift
@@ -38,4 +37,3 @@ class CommandCompleter
   def complete(prefix : String) : Array(String)
     @commands.select { |command| command.starts_with?(prefix) }
   end
-end
