@@ -11,9 +11,17 @@ module Input
       test times trap true type ulimit umask unalias unset wait
     )
     
+    getter label : String
     getter commands : Array(String)
     
-    def initialize(path : String = ENV["PATH"]? || "")
+    def initialize(path : String = ENV["PATH"]? || "", custom_commands : Array(String)? = nil)
+      if names = custom_commands
+        @label = "REPL commands"
+        @commands = names.uniq.sort!
+        return
+      end
+    
+      @label = "Shell commands"
       names = {} of String => Bool
       SHELL_BUILTINS.each { |name| names[name] = true }
     
@@ -79,10 +87,11 @@ module Input
       @ready_path : String,
       @keyboard : TmuxREPL::Keyboard::Dispatcher,
       @on_previous : Proc(Nil)? = nil,
-      @on_next : Proc(Nil)? = nil
+      @on_next : Proc(Nil)? = nil,
+      custom_commands : Array(String)? = nil
     )
       @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN, @keyboard)
-      @command_completer = CommandCompleter.new
+      @command_completer = CommandCompleter.new(custom_commands: custom_commands)
       super()
     end
     
@@ -91,7 +100,7 @@ module Input
     def auto_complete(current_word : String, expression_before : String) : {String, Array(String)}
       return {"", [] of String} unless expression_before.strip.empty?
     
-      {"Shell commands", @command_completer.complete(current_word)}
+      {@command_completer.label, @command_completer.complete(current_word)}
     end
     
     # Open Reply's suggestion list as soon as the first command character is typed.
@@ -296,7 +305,12 @@ module Input
           history = TmuxREPL::InputHistory.new
           on_previous = -> { handle_control(":prev", events, history); nil }
           on_next = -> { handle_control(":next", events, history); nil }
-          reader = Reader.new(input_pid_path, keyboard, on_previous, on_next)
+          custom_commands = if value = ENV["TMUX_REPL_CUSTOM_COMMANDS"]?
+            value.split('\n').reject { |name| name.empty? }
+          else
+            nil
+          end
+          reader = Reader.new(input_pid_path, keyboard, on_previous, on_next, custom_commands)
           File.delete(startup_stage_path) if File.exists?(startup_stage_path)
       
           terminal_mode.enable
