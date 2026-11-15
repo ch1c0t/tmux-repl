@@ -21,7 +21,12 @@ def run : Nil
     history = TmuxREPL::InputHistory.new
     on_previous = -> { handle_control(":prev", events, history); nil }
     on_next = -> { handle_control(":next", events, history); nil }
-    reader = Reader.new(input_pid_path, keyboard, on_previous, on_next)
+    custom_commands = if value = ENV["TMUX_REPL_CUSTOM_COMMANDS"]?
+      value.split('\n').reject { |name| name.empty? }
+    else
+      nil
+    end
+    reader = Reader.new(input_pid_path, keyboard, on_previous, on_next, custom_commands)
     File.delete(startup_stage_path) if File.exists?(startup_stage_path)
 
     terminal_mode.enable

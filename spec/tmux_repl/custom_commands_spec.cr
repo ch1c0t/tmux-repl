@@ -44,6 +44,23 @@ describe TmuxREPL::Definition do
     definition.session.custom_command_mode.should be_true
   end
 
+  it "passes registered command names to the input process environment" do
+    definition = TmuxREPL.define("custom") do |repl|
+      repl.on_command("create_disk") { |_context, _arguments| }
+      repl.on_command("ocr") { |_context, _arguments| }
+    end
+
+    definition.session.environment["TMUX_REPL_CUSTOM_COMMANDS"].should eq("create_disk\nocr")
+  end
+
+  it "does not pass a custom command registry to native shell sessions" do
+    definition = TmuxREPL.define("native") do |repl|
+      repl.command("sh")
+    end
+
+    definition.session.environment.has_key?("TMUX_REPL_CUSTOM_COMMANDS").should be_false
+  end
+
   it "rejects duplicate custom command names" do
     expect_raises(ArgumentError, "already registered") do
       TmuxREPL.define("custom") do |repl|

@@ -16,6 +16,7 @@ describe Input::CommandCompleter do
       completer.complete("prepare_alpine").should eq(["prepare_alpine_bundle"])
       completer.complete("prepare_").should eq(["prepare_alpine_bundle"])
       completer.complete("missing").should be_empty
+      completer.label.should eq("Shell commands")
     ensure
       FileUtils.rm_rf(directory)
     end
@@ -41,5 +42,18 @@ describe Input::CommandCompleter do
 
     completer.complete("pri").should contain("printf")
     completer.complete("ex").should contain("exec")
+    completer.label.should eq("Shell commands")
+  end
+
+  it "uses only the registered custom commands in custom REPL mode" do
+    completer = Input::CommandCompleter.new(
+      custom_commands: ["create_ext4_disk", "create_disk", "prepare_alpine_bundle"]
+    )
+
+    completer.label.should eq("REPL commands")
+    completer.commands.should eq(["create_disk", "create_ext4_disk", "prepare_alpine_bundle"])
+    completer.complete("create_").should eq(["create_disk", "create_ext4_disk"])
+    completer.complete("prepare_").should eq(["prepare_alpine_bundle"])
+    completer.complete("printf").should be_empty
   end
 end

@@ -9,10 +9,11 @@ def initialize(
   @ready_path : String,
   @keyboard : TmuxREPL::Keyboard::Dispatcher,
   @on_previous : Proc(Nil)? = nil,
-  @on_next : Proc(Nil)? = nil
+  @on_next : Proc(Nil)? = nil,
+  custom_commands : Array(String)? = nil
 )
   @keyboard_io = TmuxREPL::Keyboard::InputIO.new(STDIN, @keyboard)
-  @command_completer = CommandCompleter.new
+  @command_completer = CommandCompleter.new(custom_commands: custom_commands)
   super()
 end
 
@@ -21,7 +22,7 @@ include ReadNext
 def auto_complete(current_word : String, expression_before : String) : {String, Array(String)}
   return {"", [] of String} unless expression_before.strip.empty?
 
-  {"Shell commands", @command_completer.complete(current_word)}
+  {@command_completer.label, @command_completer.complete(current_word)}
 end
 
 # Open Reply's suggestion list as soon as the first command character is typed.
