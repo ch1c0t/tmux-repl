@@ -48,12 +48,20 @@ $PATH discovery.
 Start a REPL session with `tmux.repl start [SESSION] [--no-focus]`; stop it with
 tmux.repl stop [SESSION].
 
-When the left pane is active, submit shell commands as usual. As soon as you type
-the first character of a command, matching executable names from `$PATH` and common
-POSIX shell builtins appear above the input. The typed text is not changed; press
-Tab to accept/cycle suggestions or Shift+Tab to cycle backwards. Suggestions are
-limited to the first command word, so arguments are edited normally. Each input gets
-an ID. Use these controls in the left pane to select which input is shown on the right:
+When the left pane is active, command suggestions depend on the REPL mode:
+
+- Native shell sessions suggest executable names from `$PATH` and common POSIX
+  shell builtins.
+- Custom-command sessions suggest only the names registered with
+  `Definition#on_command`. The registry used for dispatch is also the source
+  of autocomplete suggestions, so host shell executables do not pollute an
+  application's command list.
+
+Suggestions appear as soon as you type the first character of the command. The
+typed text is not changed; press Tab to accept/cycle suggestions or Shift+Tab
+to cycle backwards. Suggestions are limited to the first command word, so
+arguments are edited normally. Each input gets an ID. Use these controls in
+the left pane to select which input is shown on the right:
 
     :list       List submitted inputs
     :select ID  Display the output associated with a specific input
