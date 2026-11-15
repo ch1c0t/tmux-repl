@@ -87,10 +87,17 @@ end
 def session : Session
   raise ArgumentError.new("A REPL cannot combine a native command with custom handlers") if @command && custom_commands?
 
+  environment = @environment.dup
+  if custom_commands?
+    environment["TMUX_REPL_CUSTOM_COMMANDS"] = command_names.join("\n")
+  else
+    environment.delete("TMUX_REPL_CUSTOM_COMMANDS")
+  end
+
   Session.new(
     @name,
     command: @command,
-    environment: @environment,
+    environment: environment,
     start_directory: @start_directory,
     input_executable: @input_executable,
     output_executable: @output_executable,

@@ -5,9 +5,17 @@ SHELL_BUILTINS = %w(
   test times trap true type ulimit umask unalias unset wait
 )
 
+getter label : String
 getter commands : Array(String)
 
-def initialize(path : String = ENV["PATH"]? || "")
+def initialize(path : String = ENV["PATH"]? || "", custom_commands : Array(String)? = nil)
+  if names = custom_commands
+    @label = "REPL commands"
+    @commands = names.uniq.sort!
+    return
+  end
+
+  @label = "Shell commands"
   names = {} of String => Bool
   SHELL_BUILTINS.each { |name| names[name] = true }
 
