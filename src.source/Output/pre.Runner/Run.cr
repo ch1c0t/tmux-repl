@@ -1,5 +1,7 @@
 # Connect to the event stream, render its events, and stay alive with the tmux session.
 def run : Nil
+  view = View.new
+  Signal::WINCH.trap { view.render }
   prepare_startup
   event_queue : AMQP::Client::Queue? = nil
   consumer_tag : String? = nil
@@ -14,7 +16,6 @@ def run : Nil
     update_startup_stage("declaring event stream")
     queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
     event_queue = queue
-    view = View.new
     shutdown = Channel(Nil).new(1)
 
     Process.on_terminate do |_reason|
@@ -53,6 +54,7 @@ def run : Nil
     report_startup_failure(ex)
     exit 1
   ensure
+    Signal::WINCH.reset
     begin
       dispatcher.try &.stop
     ensure
