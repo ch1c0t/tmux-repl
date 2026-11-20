@@ -38,7 +38,7 @@ private def attach_panes : Nil
 
   @input_pane = panes[0]
   @output_pane = panes[1]
-  expect_output("No inputs yet.", timeout: 3.seconds)
+  expect_output("No inputs yet.")
 end
 
 private def submit_command(sequence : Int32, command : String, expected_output : String) : Nil
