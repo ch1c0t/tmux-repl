@@ -54,7 +54,7 @@ private def header_lines(
   ]
 end
 
-# Keep the footer to one control row plus the exit status and line summary.
+# Keep the footer to the boundary, combined controls/status row, and line summary.
 private def footer_lines(sequence : UInt64, width : Int32) : Array(String)
   controls = if @wrap_lines
     "[WRAP · Up/Down: scroll · Ctrl+W: no-wrap · Ctrl+L: list]"
