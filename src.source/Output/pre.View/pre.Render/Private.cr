@@ -61,11 +61,10 @@ private def footer_lines(sequence : UInt64, width : Int32) : Array(String)
   else
     "[NO-WRAP · ←/→: horizontal · Home/End: edges · Ctrl+W: wrap]"
   end
-  lines = ["─" * width, controls]
   if status = @statuses[sequence]?
-    lines[-1] += " · [exit status: #{status}]"
+    controls = "[exit status: #{status}] · #{controls}"
   end
-  lines << ""
+  lines = ["─" * width, controls, ""]
   lines
 end
 
