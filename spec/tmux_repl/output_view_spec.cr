@@ -53,6 +53,21 @@ describe Output::View do
     output.to_s.should contain("(running...)")
   end
 
+  it "encloses selected output with full-width horizontal rules" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"echo hello"})))
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "first output\\nsecond output"}.to_json))
+
+    output = IO::Memory.new
+    view.render(output, height: 10, width: 41)
+
+    frame = output.to_s
+    rule = "─" * 40
+    frame.scan(rule).size.should eq(2)
+    frame.should contain("first output")
+    frame.should contain("second output")
+  end
+
   it "streams raw output while running, then switches to clean output" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run task"})))
