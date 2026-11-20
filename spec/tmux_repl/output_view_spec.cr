@@ -62,7 +62,6 @@ describe Output::View do
     view.render(output, height: 10, width: 41)
 
     frame = output.to_s
-    rule = "─" * 40
     frame.scan(/─{40}/).size.should eq(2)
     frame.should contain("first output")
     frame.should contain("second output")
