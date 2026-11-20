@@ -67,6 +67,19 @@ describe Output::View do
     frame.should contain("second output")
   end
 
+  it "keeps the exit status visible in a narrow output pane" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"printf result"})))
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => "result"}.to_json))
+
+    output = IO::Memory.new
+    view.render(output, height: 8, width: 40)
+
+    output.to_s.should contain("result")
+    output.to_s.should contain("[exit status: 0]")
+    output.to_s.scan(/─{39}/).size.should eq(2)
+  end
+
   it "streams raw output while running, then switches to clean output" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run task"})))
