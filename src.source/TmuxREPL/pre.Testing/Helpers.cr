@@ -22,7 +22,7 @@ private def startup_diagnostics : String
   panes = @server.session(name).active_window.panes.map_with_index do |pane, index|
     command = pane.display_message("\\#{pane_current_command}")
     capture = pane_text(pane).lines.last(8).join("\n")
-    "pane[#{index}] id=#{pane.pane_id} index=#{pane.pane_index} active=#{pane.active?} size=#{pane.width}x#{pane.height} command=#{command.inspect}\n#{capture}"
+    "pane[#{index}] id=#{pane.pane_id} active=#{pane.active?} size=#{pane.width}x#{pane.height} command=#{command.inspect}\n#{capture}"
   end
   (["session: #{name}", "state: #{state.base_path}"] + states + panes).join("\n")
 rescue ex
