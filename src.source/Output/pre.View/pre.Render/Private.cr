@@ -9,8 +9,8 @@ private def render_selected(
   completed = @statuses.has_key?(sequence)
   displayed_output, mode_label = displayed_output_for(sequence, completed)
 
-  header = header_lines(sequence, command, mode_label)
-  footer = footer_lines(sequence)
+  header = header_lines(sequence, command, mode_label, screen_width)
+  footer = footer_lines(sequence, screen_width)
 
   header, footer, body_height = fit_sections(header, footer, screen_height)
   viewport = build_viewport(displayed_output, completed, body_height, screen_width)
@@ -40,23 +40,28 @@ private def displayed_output_for(sequence : UInt64, completed : Bool) : Tuple(St
 end
 
 # The header is pinned while the output viewport scrolls.
-private def header_lines(sequence : UInt64, command : String, mode_label : String) : Array(String)
+private def header_lines(
+  sequence : UInt64,
+  command : String,
+  mode_label : String,
+  width : Int32
+) : Array(String)
   wrap_label = @wrap_lines ? "WRAP" : "NO-WRAP"
   [
     "INPUT ##{sequence} [#{mode_label}; #{wrap_label}]",
     *output_lines(command),
-    "─" * 40,
+    "─" * width,
   ]
 end
 
 # Keep the footer to one control row plus the exit status and line summary.
-private def footer_lines(sequence : UInt64) : Array(String)
+private def footer_lines(sequence : UInt64, width : Int32) : Array(String)
   controls = if @wrap_lines
     "[WRAP · Up/Down: scroll · Ctrl+W: no-wrap · Ctrl+L: list]"
   else
     "[NO-WRAP · ←/→: horizontal · Home/End: edges · Ctrl+W: wrap]"
   end
-  lines = [controls]
+  lines = ["─" * width, controls]
   lines << "[exit status: #{@statuses[sequence]}]" if status = @statuses[sequence]?
   lines << ""
   lines
