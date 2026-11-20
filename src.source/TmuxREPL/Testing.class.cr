@@ -128,5 +128,5 @@ def expect_visible_items(
   return if found
 
   missing = expected_items.reject { |item| last_text.includes?(item) }
-  raise "Timed out waiting for the Output pane to show #{missing.map(&.inspect).join(", ")}.\n#{last_text}"
+  raise "Timed out waiting for the Output pane to show #{missing.map(&.inspect).join(", ")}.\n#{last_text}\n#{startup_diagnostics}"
 end
