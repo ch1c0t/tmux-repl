@@ -6,7 +6,7 @@ class StandardREPLScenario < TmuxREPL::Testing::Scenario
   end
 
   step "Find the new session and its two panes" do
-    expect_visible("No inputs yet.", timeout: 3.seconds)
+    expect_visible("No inputs yet.")
   end
 
   step "Submit the first command" do
