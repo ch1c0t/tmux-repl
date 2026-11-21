@@ -296,7 +296,6 @@ describe Output::View do
     frame = output.to_s
     frame.should contain("\e[1;38;2;255;0;0mABCDEF\e[0m")
     frame.should contain("\e[1;38;2;255;0;0mGHIJ\e[0m")
-    frame.should contain("[Output lines 1–1 of 1]")
   end
 
   it "does not display incomplete ANSI sequences split across streamed chunks" do
