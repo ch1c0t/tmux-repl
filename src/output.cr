@@ -719,7 +719,7 @@ module Output
           end
         end
         
-                # Compose fixed sections around the viewport without changing their contents.
+        # Compose fixed sections around the viewport without changing their contents.
         private def compose_frame(
           header : Array(String),
           viewport : Viewport,
