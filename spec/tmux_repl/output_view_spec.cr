@@ -284,6 +284,52 @@ describe Output::View do
     view.wrap_lines?.should be_true
   end
 
+  it "wraps ANSI-colored output by visible columns and restores color on continuation rows" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run colors"})))
+    colored_output = "\e[1;38;2;255;0;0mABCDEFGHIJ\e[0m"
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => colored_output}.to_json))
+
+    output = IO::Memory.new
+    view.render(output, height: 9, width: 7)
+
+    frame = output.to_s
+    frame.should contain("\e[1;38;2;255;0;0mABCDEF\e[0m")
+    frame.should contain("\e[1;38;2;255;0;0mGHIJ\e[0m")
+  end
+
+  it "does not display incomplete ANSI sequences split across streamed chunks" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"stream colors"})))
+    view.update(JSON.parse({"type" => "output", "sequence" => 1, "chunk" => "ready \e[38;5;"}.to_json))
+
+    partial = IO::Memory.new
+    view.render(partial, height: 9, width: 40)
+    partial.to_s.should contain("ready ")
+    partial.to_s.should_not contain("\e[38;5;")
+
+    view.update(JSON.parse({"type" => "output", "sequence" => 1, "chunk" => "196mERROR\e[0m"}.to_json))
+    complete = IO::Memory.new
+    view.render(complete, height: 9, width: 40)
+    complete.to_s.should contain("\e[38;5;196mERROR\e[0m")
+  end
+
+  it "preserves ANSI styles while horizontally clipping output" do
+    view = Output::View.new
+    view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run colors"})))
+    colored_output = "\e[31m0123456789ABCDEFGHIJ\e[0m"
+    view.update(JSON.parse({"type" => "complete", "sequence" => 1, "status" => 0, "clean_output" => colored_output}.to_json))
+    view.toggle_wrap.should be_false
+
+    initial = IO::Memory.new
+    view.render(initial, height: 9, width: 12)
+    view.scroll(TmuxREPL::Keyboard::Action::ScrollHorizontalRight).should be_true
+
+    shifted = IO::Memory.new
+    view.render(shifted, height: 9, width: 12)
+    shifted.to_s.should contain("‹\e[31m123456789\e[0m›")
+  end
+
   it "supports no-wrap horizontal scrolling and jumping to either edge" do
     view = Output::View.new
     view.update(JSON.parse(%({"type":"input","sequence":1,"command":"run task"})))

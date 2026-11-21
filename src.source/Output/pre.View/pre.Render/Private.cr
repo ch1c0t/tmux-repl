@@ -140,11 +140,12 @@ end
 # Convert logical lines into terminal rows while retaining their original line numbers.
 private def viewport_rows(lines : Array(String), width : Int32) : Array(Tuple(String, Int32))
   rows = [] of Tuple(String, Int32)
+  active_styles = [] of String
   lines.each_with_index do |line, index|
     rendered = if @wrap_lines
-      wrap_line(line, width)
+      wrap_line(line, width, active_styles)
     else
-      [horizontal_line(line, width)]
+      [horizontal_line(line, width, active_styles)]
     end
     rendered.each { |row| rows << {row, index} }
   end
@@ -155,39 +156,47 @@ private def viewport_row_count(text : String, width : Int32) : Int32
   viewport_rows(output_lines(text), width).size
 end
 
-# Split a logical line without losing or rewriting its original content.
-private def wrap_line(line : String, width : Int32) : Array(String)
+# Split a logical line without counting or splitting terminal control sequences.
+private def wrap_line(line : String, width : Int32, active_styles : Array(String)) : Array(String)
   width = 1 if width < 1
   rows = [] of String
-  current = [] of Char
+  current = String::Builder.new
+  active_styles.each { |style| current << style }
   current_width = 0
 
-  line.each_char do |char|
-    char_width = terminal_character_width(char)
-    if current_width > 0 && current_width + char_width > width
-      rows << current.join
-      current.clear
+  terminal_units(line).each do |token, token_width, control|
+    if control
+      current << token
+      update_active_styles(active_styles, token)
+      next
+    end
+
+    if token_width > 0 && current_width > 0 && current_width + token_width > width
+      current << "\e[0m" if active_styles.any?
+      rows << current.to_s
+      current = String::Builder.new
+      active_styles.each { |style| current << style }
       current_width = 0
     end
-    current << char
-    current_width += char_width
+
+    current << token
+    current_width += token_width
   end
 
-  rows << current.join
+  current << "\e[0m" if active_styles.any?
+  rows << current.to_s
   rows
 end
 
-# Keep a single visual row and mark hidden content at either edge.
-private def horizontal_line(line : String, width : Int32) : String
+# Keep one visual row and mark hidden content at either edge.
+private def horizontal_line(line : String, width : Int32, active_styles : Array(String)) : String
   line_width = display_width(line)
-  return line if @horizontal_offset == 0 && line_width <= width
-
   left_marker = @horizontal_offset > 0
   content_width = width - (left_marker ? 1 : 0)
   remaining_width = line_width - @horizontal_offset
   right_marker = remaining_width > content_width
   content_width -= 1 if right_marker
-  content = slice_display_columns(line, @horizontal_offset, content_width)
+  content = slice_display_columns(line, @horizontal_offset, content_width, active_styles)
 
   String.build do |buffer|
     buffer << "‹" if left_marker
@@ -198,8 +207,78 @@ end
 
 private def display_width(text : String) : Int32
   width = 0
-  text.each_char { |char| width += terminal_character_width(char) }
+  terminal_units(text).each { |_, token_width, _| width += token_width }
   width
+end
+
+# Tokenize ANSI sequences separately so they never occupy terminal columns.
+private def terminal_units(text : String) : Array(Tuple(String, Int32, Bool))
+  characters = text.chars
+  units = [] of Tuple(String, Int32, Bool)
+  index = 0
+
+  while index < characters.size
+    if characters[index] == '\e'
+      ending = ansi_sequence_end(characters, index)
+      break unless ending
+
+      units << {characters[index, ending - index].join, 0, true}
+      index = ending
+    else
+      char = characters[index]
+      units << {char.to_s, terminal_character_width(char), false}
+      index += 1
+    end
+  end
+
+  units
+end
+
+# Return the end of a complete 7-bit ANSI sequence; incomplete tails are buffered
+# by omission until the next streamed chunk completes them.
+private def ansi_sequence_end(characters : Array(Char), start : Int32) : Int32?
+  introducer = characters[start + 1]?
+  return nil unless introducer
+
+  case introducer
+  when '['
+    index = start + 2
+    while index < characters.size
+      return index + 1 if (0x40..0x7e).includes?(characters[index].ord)
+      index += 1
+    end
+  when ']', 'P', 'X', '^', '_'
+    index = start + 2
+    while index < characters.size
+      char = characters[index]
+      return index + 1 if introducer == ']' && char == '\a'
+      return index + 2 if char == '\e' && characters[index + 1]? == '\\'
+      index += 1
+    end
+  else
+    index = start + 1
+    while index < characters.size && (0x20..0x2f).includes?(characters[index].ord)
+      index += 1
+    end
+    return index + 1 if index < characters.size && (0x30..0x7e).includes?(characters[index].ord)
+  end
+
+  nil
+end
+
+# Retain the SGR sequences needed to restore the current style after a wrapped
+# or horizontally clipped row. A leading reset starts a fresh style run.
+private def update_active_styles(styles : Array(String), sequence : String) : Nil
+  return unless sequence.starts_with?("\e[") && sequence.ends_with?("m")
+
+  parameters = sequence[2...-1]
+  first_parameter = parameters.split(';').first?
+  if first_parameter.nil? || first_parameter.empty? || first_parameter == "0"
+    styles.clear
+    styles << sequence unless parameters.empty? || parameters == "0"
+  else
+    styles << sequence unless styles.last? == sequence
+  end
 end
 
 # Approximate terminal cell width: combining marks are zero, East Asian wide
@@ -232,32 +311,62 @@ private def terminal_character_width(char : Char) : Int32
   1
 end
 
-# Extract only complete characters that fit in the requested display columns.
-private def slice_display_columns(text : String, start_column : Int32, width : Int32) : String
-  return "" if width <= 0
-
+# Extract complete characters by display column while preserving SGR state.
+private def slice_display_columns(
+  text : String,
+  start_column : Int32,
+  width : Int32,
+  active_styles : Array(String) = [] of String
+) : String
   column = 0
   visible_width = 0
+  visible = false
+  clipped = false
+  visible_styles = [] of String
+
   String.build do |buffer|
-    text.each_char do |char|
-      char_width = terminal_character_width(char)
-
-      if column + char_width <= start_column
-        column += char_width
+    terminal_units(text).each do |token, token_width, control|
+      if control
+        if visible && !clipped
+          buffer << token
+          update_active_styles(visible_styles, token)
+        end
+        update_active_styles(active_styles, token)
         next
       end
 
-      if column < start_column && char_width > 0
-        column += char_width
+      if token_width == 0
+        buffer << token if visible && !clipped
         next
       end
 
-      break if char_width > 0 && visible_width + char_width > width
+      if column + token_width <= start_column
+        column += token_width
+        next
+      end
 
-      buffer << char
-      visible_width += char_width
-      column += char_width
+      if column < start_column
+        column += token_width
+        next
+      end
+
+      if !clipped && visible_width + token_width <= width
+        unless visible
+          active_styles.each do |style|
+            buffer << style
+            visible_styles << style
+          end
+          visible = true
+        end
+        buffer << token
+        visible_width += token_width
+      else
+        clipped = true
+      end
+      column += token_width
     end
+
+    buffer << "\e[0m" if visible && visible_styles.any?
   end
 end
 
