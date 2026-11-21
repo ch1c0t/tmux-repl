@@ -269,7 +269,7 @@ end
 # Retain the SGR sequences needed to restore the current style after a wrapped
 # or horizontally clipped row. A leading reset starts a fresh style run.
 private def update_active_styles(styles : Array(String), sequence : String) : Nil
-  return unless sequence.starts_with?("\e[") && sequence.ends_with?('m')
+  return unless sequence.starts_with?("\e[") && sequence.ends_with?("m")
 
   parameters = sequence[2...-1]
   first_parameter = parameters.split(';').first?
