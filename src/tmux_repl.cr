@@ -2231,6 +2231,25 @@ module TmuxREPL
         pane.capture_pane(join_wrapped: true).join("\n")
       end
       
+      private def startup_diagnostics : String
+        name = @session_name || return "REPL session not attached."
+        state = State.new(name)
+        files = %w[input.pid input.startup input.error output.pid output.startup output.error worker.pid worker.startup worker.error]
+        states = files.map do |file|
+          path = state.path(file)
+          value = File.exists?(path) ? File.read(path).strip : "missing"
+          "#{file}: #{value}"
+        end
+        panes = @server.session(name).active_window.panes.map_with_index do |pane, index|
+          command = pane.display_message("\#{pane_current_command}")
+          capture = pane_text(pane).lines.last(8).join("\n")
+          "pane[#{index}] id=#{pane.pane_id} active=#{pane.active?} size=#{pane.width}x#{pane.height} command=#{command.inspect}\n#{capture}"
+        end
+        (["session: #{name}", "state: #{state.base_path}"] + states + panes).join("\n")
+      rescue ex
+        "Startup diagnostics failed: #{ex.class}: #{ex.message}"
+      end
+      
       private def wait_until(
         timeout : Time::Span? = nil,
         interval : Time::Span = 25.milliseconds,
@@ -2745,7 +2764,7 @@ module TmuxREPL
       return if found
     
       missing = expected_items.reject { |item| last_text.includes?(item) }
-      raise "Timed out waiting for the Output pane to show #{missing.map(&.inspect).join(", ")}.\n#{last_text}"
+      raise "Timed out waiting for the Output pane to show #{missing.map(&.inspect).join(", ")}.\n#{last_text}\n#{startup_diagnostics}"
     end
   
     class Suite

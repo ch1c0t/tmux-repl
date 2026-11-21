@@ -231,6 +231,8 @@ module Output
     module Run
       # Connect to the event stream, render its events, and stay alive with the tmux session.
       def run : Nil
+        view = View.new
+        Signal::WINCH.trap { view.render }
         prepare_startup
         event_queue : AMQP::Client::Queue? = nil
         consumer_tag : String? = nil
@@ -245,7 +247,6 @@ module Output
           update_startup_stage("declaring event stream")
           queue = TmuxREPL.stream_queue(channel, TmuxREPL.events_queue_name(@session_name))
           event_queue = queue
-          view = View.new
           shutdown = Channel(Nil).new(1)
       
           Process.on_terminate do |_reason|
@@ -284,6 +285,7 @@ module Output
           report_startup_failure(ex)
           exit 1
         ensure
+          Signal::WINCH.reset
           begin
             dispatcher.try &.stop
           ensure
@@ -356,8 +358,8 @@ module Output
           completed = @statuses.has_key?(sequence)
           displayed_output, mode_label = displayed_output_for(sequence, completed)
         
-          header = header_lines(sequence, command, mode_label)
-          footer = footer_lines(sequence)
+          header = header_lines(sequence, command, mode_label, screen_width)
+          footer = footer_lines(sequence, screen_width)
         
           header, footer, body_height = fit_sections(header, footer, screen_height)
           viewport = build_viewport(displayed_output, completed, body_height, screen_width)
@@ -387,25 +389,31 @@ module Output
         end
         
         # The header is pinned while the output viewport scrolls.
-        private def header_lines(sequence : UInt64, command : String, mode_label : String) : Array(String)
+        private def header_lines(
+          sequence : UInt64,
+          command : String,
+          mode_label : String,
+          width : Int32
+        ) : Array(String)
           wrap_label = @wrap_lines ? "WRAP" : "NO-WRAP"
           [
             "INPUT ##{sequence} [#{mode_label}; #{wrap_label}]",
             *output_lines(command),
-            "─" * 40,
+            "─" * width,
           ]
         end
         
-        # Keep the footer to one control row plus the exit status and line summary.
-        private def footer_lines(sequence : UInt64) : Array(String)
+        # Keep the footer to the boundary, combined controls/status row, and line summary.
+        private def footer_lines(sequence : UInt64, width : Int32) : Array(String)
           controls = if @wrap_lines
             "[WRAP · Up/Down: scroll · Ctrl+W: no-wrap · Ctrl+L: list]"
           else
             "[NO-WRAP · ←/→: horizontal · Home/End: edges · Ctrl+W: wrap]"
           end
-          lines = [controls]
-          lines << "[exit status: #{@statuses[sequence]}]" if status = @statuses[sequence]?
-          lines << ""
+          if status = @statuses[sequence]?
+            controls = "[exit status: #{status}] · #{controls}"
+          end
+          lines = ["─" * width, controls, ""]
           lines
         end
         
